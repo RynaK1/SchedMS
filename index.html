@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SchedMS - MapleStory To-Do</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>SchedMS</h1>
+        <p>Minimal MapleStory daily/weekly tracker</p>
+      </header>
+
+      <nav class="top-tabs" aria-label="Main navigation tabs">
+        <button class="top-tab active" data-view="lists">Lists</button>
+        <button class="top-tab" data-view="options">Options</button>
+      </nav>
+
+      <section id="lists-view" class="view active">
+        <div class="list-grid">
+          <section class="todo-card" data-list="daily">
+            <div class="card-header">
+              <h2>Daily</h2>
+              <span id="daily-reset-label" class="reset-label"></span>
+            </div>
+
+            <div class="status-tabs" role="tablist" aria-label="Daily task status tabs">
+              <button class="status-tab active" data-list="daily" data-filter="unfinished">Unfinished</button>
+              <button class="status-tab" data-list="daily" data-filter="finished">Finished</button>
+            </div>
+
+            <form class="add-task-form" data-list="daily">
+              <label class="sr-only" for="daily-task-input">Add daily task</label>
+              <input id="daily-task-input" type="text" maxlength="120" placeholder="Add daily MapleStory task..." required />
+              <button type="submit">Add</button>
+            </form>
+
+            <ul id="daily-task-list" class="task-list"></ul>
+            <p id="daily-empty" class="empty-msg">No tasks in this tab yet.</p>
+          </section>
+
+          <section class="todo-card" data-list="weekly">
+            <div class="card-header">
+              <h2>Weekly</h2>
+              <span id="weekly-reset-label" class="reset-label"></span>
+            </div>
+
+            <div class="status-tabs" role="tablist" aria-label="Weekly task status tabs">
+              <button class="status-tab active" data-list="weekly" data-filter="unfinished">Unfinished</button>
+              <button class="status-tab" data-list="weekly" data-filter="finished">Finished</button>
+            </div>
+
+            <form class="add-task-form" data-list="weekly">
+              <label class="sr-only" for="weekly-task-input">Add weekly task</label>
+              <input id="weekly-task-input" type="text" maxlength="120" placeholder="Add weekly MapleStory task..." required />
+              <button type="submit">Add</button>
+            </form>
+
+            <ul id="weekly-task-list" class="task-list"></ul>
+            <p id="weekly-empty" class="empty-msg">No tasks in this tab yet.</p>
+          </section>
+        </div>
+      </section>
+
+      <section id="options-view" class="view">
+        <section class="todo-card options-card">
+          <h2>Reset Options</h2>
+          <p>Pick when your lists reset. Changes save automatically.</p>
+
+          <div class="option-row">
+            <label for="daily-reset-time">Daily reset time</label>
+            <input id="daily-reset-time" type="time" />
+          </div>
+
+          <div class="option-row">
+            <label for="weekly-reset-day">Weekly reset day</label>
+            <select id="weekly-reset-day">
+              <option value="0">Sunday</option>
+              <option value="1">Monday</option>
+              <option value="2">Tuesday</option>
+              <option value="3">Wednesday</option>
+              <option value="4">Thursday</option>
+              <option value="5">Friday</option>
+              <option value="6">Saturday</option>
+            </select>
+          </div>
+
+          <div class="option-row">
+            <label for="weekly-reset-time">Weekly reset time</label>
+            <input id="weekly-reset-time" type="time" />
+          </div>
+
+          <p class="hint">Tip: Keep this aligned with your in-game reset schedule.</p>
+        </section>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
