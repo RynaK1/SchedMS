@@ -9,10 +9,7 @@
   <body>
     <main class="app">
       <header class="app-header">
-        <div>
-          <h1>SchedMS</h1>
-          <p>MapleStory planner with separate personal spaces for two players.</p>
-        </div>
+        <h1>SchedMS</h1>
         <div class="status-pill" id="save-status">Auto-saved</div>
       </header>
 
@@ -22,95 +19,129 @@
       </nav>
 
       <section id="lists-view" class="view active">
-        <section class="layout-main">
+        <div class="list-stack">
           <section class="todo-card todo-primary" data-list="todo">
             <div class="card-header">
               <h2>Main To-Do</h2>
-              <span class="reset-label">Persistent list</span>
             </div>
-            <p class="subcopy">Each person has their own separate to-do list below.</p>
+            <div class="person-split">
+              <section class="person-column" data-list="todo" data-person="p1">
+                <h3 class="person-title" id="todo-p1-title">Player 1</h3>
+                <div class="status-tabs" role="tablist" aria-label="To-Do Player 1 status tabs">
+                  <button class="status-tab active" data-list="todo" data-person="p1" data-filter="unfinished">Unfinished</button>
+                  <button class="status-tab" data-list="todo" data-person="p1" data-filter="finished">Finished</button>
+                </div>
+                <form class="add-task-form" data-list="todo" data-person="p1">
+                  <label class="sr-only" for="todo-p1-input">Add todo task for player 1</label>
+                  <input id="todo-p1-input" type="text" maxlength="120" placeholder="Add task" required />
+                  <button type="submit">Add</button>
+                </form>
+                <p id="todo-p1-error" class="form-msg" role="alert"></p>
+                <ul id="todo-p1-list" class="task-list"></ul>
+                <p id="todo-p1-empty" class="empty-msg">No tasks in this tab yet.</p>
+              </section>
 
-            <div class="person-tabs" role="tablist" aria-label="To-Do person tabs">
-              <button class="person-tab active" data-list="todo" data-person="p1">Player 1</button>
-              <button class="person-tab" data-list="todo" data-person="p2">Player 2</button>
+              <section class="person-column" data-list="todo" data-person="p2">
+                <h3 class="person-title" id="todo-p2-title">Player 2</h3>
+                <div class="status-tabs" role="tablist" aria-label="To-Do Player 2 status tabs">
+                  <button class="status-tab active" data-list="todo" data-person="p2" data-filter="unfinished">Unfinished</button>
+                  <button class="status-tab" data-list="todo" data-person="p2" data-filter="finished">Finished</button>
+                </div>
+                <form class="add-task-form" data-list="todo" data-person="p2">
+                  <label class="sr-only" for="todo-p2-input">Add todo task for player 2</label>
+                  <input id="todo-p2-input" type="text" maxlength="120" placeholder="Add task" required />
+                  <button type="submit">Add</button>
+                </form>
+                <p id="todo-p2-error" class="form-msg" role="alert"></p>
+                <ul id="todo-p2-list" class="task-list"></ul>
+                <p id="todo-p2-empty" class="empty-msg">No tasks in this tab yet.</p>
+              </section>
             </div>
-
-            <div class="status-tabs" role="tablist" aria-label="To-Do task status tabs">
-              <button class="status-tab active" data-list="todo" data-filter="unfinished">Unfinished</button>
-              <button class="status-tab" data-list="todo" data-filter="finished">Finished</button>
-            </div>
-
-            <form class="add-task-form" data-list="todo">
-              <label class="sr-only" for="todo-task-input">Add to-do task</label>
-              <input id="todo-task-input" type="text" maxlength="120" placeholder="Add to-do for selected person" required />
-              <button type="submit">Add</button>
-            </form>
-            <p id="todo-error" class="form-msg" role="alert"></p>
-
-            <ul id="todo-task-list" class="task-list"></ul>
-            <p id="todo-empty" class="empty-msg">No tasks in this tab yet.</p>
           </section>
 
-          <aside class="side-lists">
-            <section class="todo-card daily-card" data-list="daily">
-              <div class="card-header">
-                <h2>Daily</h2>
-                <span id="daily-reset-label" class="reset-label"></span>
-              </div>
+          <section class="todo-card daily-card" data-list="daily">
+            <div class="card-header">
+              <h2>Daily</h2>
+              <span id="daily-reset-label" class="reset-label"></span>
+            </div>
+            <div class="person-split">
+              <section class="person-column" data-list="daily" data-person="p1">
+                <h3 class="person-title" id="daily-p1-title">Player 1</h3>
+                <div class="status-tabs" role="tablist" aria-label="Daily Player 1 status tabs">
+                  <button class="status-tab active" data-list="daily" data-person="p1" data-filter="unfinished">Unfinished</button>
+                  <button class="status-tab" data-list="daily" data-person="p1" data-filter="finished">Finished</button>
+                </div>
+                <form class="add-task-form" data-list="daily" data-person="p1">
+                  <label class="sr-only" for="daily-p1-input">Add daily task for player 1</label>
+                  <input id="daily-p1-input" type="text" maxlength="120" placeholder="Add daily task" required />
+                  <button type="submit">Add</button>
+                </form>
+                <p id="daily-p1-error" class="form-msg" role="alert"></p>
+                <ul id="daily-p1-list" class="task-list"></ul>
+                <p id="daily-p1-empty" class="empty-msg">No tasks in this tab yet.</p>
+              </section>
 
-              <div class="person-tabs" role="tablist" aria-label="Daily person tabs">
-                <button class="person-tab active" data-list="daily" data-person="p1">Player 1</button>
-                <button class="person-tab" data-list="daily" data-person="p2">Player 2</button>
-              </div>
+              <section class="person-column" data-list="daily" data-person="p2">
+                <h3 class="person-title" id="daily-p2-title">Player 2</h3>
+                <div class="status-tabs" role="tablist" aria-label="Daily Player 2 status tabs">
+                  <button class="status-tab active" data-list="daily" data-person="p2" data-filter="unfinished">Unfinished</button>
+                  <button class="status-tab" data-list="daily" data-person="p2" data-filter="finished">Finished</button>
+                </div>
+                <form class="add-task-form" data-list="daily" data-person="p2">
+                  <label class="sr-only" for="daily-p2-input">Add daily task for player 2</label>
+                  <input id="daily-p2-input" type="text" maxlength="120" placeholder="Add daily task" required />
+                  <button type="submit">Add</button>
+                </form>
+                <p id="daily-p2-error" class="form-msg" role="alert"></p>
+                <ul id="daily-p2-list" class="task-list"></ul>
+                <p id="daily-p2-empty" class="empty-msg">No tasks in this tab yet.</p>
+              </section>
+            </div>
+          </section>
 
-              <div class="status-tabs" role="tablist" aria-label="Daily task status tabs">
-                <button class="status-tab active" data-list="daily" data-filter="unfinished">Unfinished</button>
-                <button class="status-tab" data-list="daily" data-filter="finished">Finished</button>
-              </div>
+          <section class="todo-card weekly-card" data-list="weekly">
+            <div class="card-header">
+              <h2>Weekly</h2>
+              <span id="weekly-reset-label" class="reset-label"></span>
+            </div>
+            <div class="person-split">
+              <section class="person-column" data-list="weekly" data-person="p1">
+                <h3 class="person-title" id="weekly-p1-title">Player 1</h3>
+                <div class="status-tabs" role="tablist" aria-label="Weekly Player 1 status tabs">
+                  <button class="status-tab active" data-list="weekly" data-person="p1" data-filter="unfinished">Unfinished</button>
+                  <button class="status-tab" data-list="weekly" data-person="p1" data-filter="finished">Finished</button>
+                </div>
+                <form class="add-task-form" data-list="weekly" data-person="p1">
+                  <label class="sr-only" for="weekly-p1-input">Add weekly task for player 1</label>
+                  <input id="weekly-p1-input" type="text" maxlength="120" placeholder="Add weekly task" required />
+                  <button type="submit">Add</button>
+                </form>
+                <p id="weekly-p1-error" class="form-msg" role="alert"></p>
+                <ul id="weekly-p1-list" class="task-list"></ul>
+                <p id="weekly-p1-empty" class="empty-msg">No tasks in this tab yet.</p>
+              </section>
 
-              <form class="add-task-form" data-list="daily">
-                <label class="sr-only" for="daily-task-input">Add daily task</label>
-                <input id="daily-task-input" type="text" maxlength="120" placeholder="Add daily for selected person" required />
-                <button type="submit">Add</button>
-              </form>
-              <p id="daily-error" class="form-msg" role="alert"></p>
-
-              <ul id="daily-task-list" class="task-list"></ul>
-              <p id="daily-empty" class="empty-msg">No tasks in this tab yet.</p>
-            </section>
-
-            <section class="todo-card weekly-card" data-list="weekly">
-              <div class="card-header">
-                <h2>Weekly</h2>
-                <span id="weekly-reset-label" class="reset-label"></span>
-              </div>
-
-              <div class="person-tabs" role="tablist" aria-label="Weekly person tabs">
-                <button class="person-tab active" data-list="weekly" data-person="p1">Player 1</button>
-                <button class="person-tab" data-list="weekly" data-person="p2">Player 2</button>
-              </div>
-
-              <div class="status-tabs" role="tablist" aria-label="Weekly task status tabs">
-                <button class="status-tab active" data-list="weekly" data-filter="unfinished">Unfinished</button>
-                <button class="status-tab" data-list="weekly" data-filter="finished">Finished</button>
-              </div>
-
-              <form class="add-task-form" data-list="weekly">
-                <label class="sr-only" for="weekly-task-input">Add weekly task</label>
-                <input id="weekly-task-input" type="text" maxlength="120" placeholder="Add weekly for selected person" required />
-                <button type="submit">Add</button>
-              </form>
-              <p id="weekly-error" class="form-msg" role="alert"></p>
-
-              <ul id="weekly-task-list" class="task-list"></ul>
-              <p id="weekly-empty" class="empty-msg">No tasks in this tab yet.</p>
-            </section>
-          </aside>
-        </section>
+              <section class="person-column" data-list="weekly" data-person="p2">
+                <h3 class="person-title" id="weekly-p2-title">Player 2</h3>
+                <div class="status-tabs" role="tablist" aria-label="Weekly Player 2 status tabs">
+                  <button class="status-tab active" data-list="weekly" data-person="p2" data-filter="unfinished">Unfinished</button>
+                  <button class="status-tab" data-list="weekly" data-person="p2" data-filter="finished">Finished</button>
+                </div>
+                <form class="add-task-form" data-list="weekly" data-person="p2">
+                  <label class="sr-only" for="weekly-p2-input">Add weekly task for player 2</label>
+                  <input id="weekly-p2-input" type="text" maxlength="120" placeholder="Add weekly task" required />
+                  <button type="submit">Add</button>
+                </form>
+                <p id="weekly-p2-error" class="form-msg" role="alert"></p>
+                <ul id="weekly-p2-list" class="task-list"></ul>
+                <p id="weekly-p2-empty" class="empty-msg">No tasks in this tab yet.</p>
+              </section>
+            </div>
+          </section>
+        </div>
 
         <section class="tool-row">
           <button id="undo-delete" class="ghost-btn" disabled>Undo last delete</button>
-          <p class="hint">Tip: Dailies/weeklies reset to unfinished at your configured reset time.</p>
         </section>
       </section>
 
@@ -130,8 +161,8 @@
 
           <h3>Reset Settings</h3>
           <div class="option-row">
-            <label for="daily-reset-time">Daily reset time</label>
-            <input id="daily-reset-time" type="time" />
+            <label for="reset-time">Reset time</label>
+            <input id="reset-time" type="time" />
           </div>
 
           <div class="option-row">
@@ -148,15 +179,9 @@
           </div>
 
           <div class="option-row">
-            <label for="weekly-reset-time">Weekly reset time</label>
-            <input id="weekly-reset-time" type="time" />
+            <label for="timezone-offset">Time zone</label>
+            <select id="timezone-offset"></select>
           </div>
-
-          <ul class="help-list">
-            <li>Each list type has separate Player 1 and Player 2 task sets.</li>
-            <li>Share this page URL and each person can edit their own sub-list tab.</li>
-            <li>Daily/Weekly tasks remain but become unfinished on reset.</li>
-          </ul>
         </section>
       </section>
     </main>

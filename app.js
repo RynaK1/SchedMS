@@ -2,28 +2,58 @@ const STORAGE_KEY = "schedms-data-v1";
 const LIST_TYPES = ["daily", "weekly", "todo"];
 const PERSON_IDS = ["p1", "p2"];
 
+const TIMEZONE_OPTIONS = [
+  ["-12:00", "UTC-12 (AoE)"],
+  ["-11:00", "UTC-11 (SST)"],
+  ["-10:00", "UTC-10 (HST)"],
+  ["-09:30", "UTC-9:30 (Marquesas)"],
+  ["-09:00", "UTC-9 (AKST)"],
+  ["-08:00", "UTC-8 (PST)"],
+  ["-07:00", "UTC-7 (MST)"],
+  ["-06:00", "UTC-6 (CST)"],
+  ["-05:00", "UTC-5 (EST)"],
+  ["-04:00", "UTC-4 (AST)"],
+  ["-03:30", "UTC-3:30 (NST)"],
+  ["-03:00", "UTC-3 (BRT)"],
+  ["-02:00", "UTC-2 (South Georgia)"],
+  ["-01:00", "UTC-1 (Azores)"],
+  ["+00:00", "UTC+0 (GMT)"],
+  ["+01:00", "UTC+1 (CET)"],
+  ["+02:00", "UTC+2 (EET)"],
+  ["+03:00", "UTC+3 (MSK)"],
+  ["+03:30", "UTC+3:30 (IRST)"],
+  ["+04:00", "UTC+4 (GST)"],
+  ["+04:30", "UTC+4:30 (AFT)"],
+  ["+05:00", "UTC+5 (PKT)"],
+  ["+05:30", "UTC+5:30 (IST)"],
+  ["+05:45", "UTC+5:45 (NPT)"],
+  ["+06:00", "UTC+6 (BST)"],
+  ["+06:30", "UTC+6:30 (MMT)"],
+  ["+07:00", "UTC+7 (ICT)"],
+  ["+08:00", "UTC+8 (AWST)"],
+  ["+08:45", "UTC+8:45 (ACWST)"],
+  ["+09:00", "UTC+9 (JST)"],
+  ["+09:30", "UTC+9:30 (ACST)"],
+  ["+10:00", "UTC+10 (AEST)"],
+  ["+10:30", "UTC+10:30 (LHST)"],
+  ["+11:00", "UTC+11 (SBT)"],
+  ["+12:00", "UTC+12 (NZST/FJT)"],
+  ["+12:45", "UTC+12:45 (CHAST)"],
+  ["+13:00", "UTC+13 (NZDT/TOT)"],
+  ["+14:00", "UTC+14 (LINT)"],
+];
+
 const blankPersonTasks = () => ({ p1: [], p2: [] });
 const blankPersonFilters = () => ({ p1: "unfinished", p2: "unfinished" });
 
 const defaultState = {
   settings: {
-    dailyResetTime: "00:00",
+    resetTime: "00:00",
     weeklyResetDay: 3,
-    weeklyResetTime: "00:00",
-    people: {
-      p1: "Player 1",
-      p2: "Player 2",
-    },
+    timezoneOffset: "-08:00",
+    people: { p1: "Player 1", p2: "Player 2" },
   },
-  periodIds: {
-    daily: "",
-    weekly: "",
-  },
-  activePerson: {
-    daily: "p1",
-    weekly: "p1",
-    todo: "p1",
-  },
+  periodIds: { daily: "", weekly: "" },
   filters: {
     daily: blankPersonFilters(),
     weekly: blankPersonFilters(),
@@ -45,19 +75,35 @@ const els = {
     options: document.getElementById("options-view"),
   },
   topTabs: document.querySelectorAll(".top-tab"),
-  personTabs: document.querySelectorAll(".person-tab"),
   statusTabs: document.querySelectorAll(".status-tab"),
   addForms: document.querySelectorAll(".add-task-form"),
   lists: {
-    daily: { list: document.getElementById("daily-task-list"), empty: document.getElementById("daily-empty"), error: document.getElementById("daily-error") },
-    weekly: { list: document.getElementById("weekly-task-list"), empty: document.getElementById("weekly-empty"), error: document.getElementById("weekly-error") },
-    todo: { list: document.getElementById("todo-task-list"), empty: document.getElementById("todo-empty"), error: document.getElementById("todo-error") },
+    daily: {
+      p1: { list: document.getElementById("daily-p1-list"), empty: document.getElementById("daily-p1-empty"), error: document.getElementById("daily-p1-error") },
+      p2: { list: document.getElementById("daily-p2-list"), empty: document.getElementById("daily-p2-empty"), error: document.getElementById("daily-p2-error") },
+    },
+    weekly: {
+      p1: { list: document.getElementById("weekly-p1-list"), empty: document.getElementById("weekly-p1-empty"), error: document.getElementById("weekly-p1-error") },
+      p2: { list: document.getElementById("weekly-p2-list"), empty: document.getElementById("weekly-p2-empty"), error: document.getElementById("weekly-p2-error") },
+    },
+    todo: {
+      p1: { list: document.getElementById("todo-p1-list"), empty: document.getElementById("todo-p1-empty"), error: document.getElementById("todo-p1-error") },
+      p2: { list: document.getElementById("todo-p2-list"), empty: document.getElementById("todo-p2-empty"), error: document.getElementById("todo-p2-error") },
+    },
+  },
+  titleEls: {
+    "todo-p1": document.getElementById("todo-p1-title"),
+    "todo-p2": document.getElementById("todo-p2-title"),
+    "daily-p1": document.getElementById("daily-p1-title"),
+    "daily-p2": document.getElementById("daily-p2-title"),
+    "weekly-p1": document.getElementById("weekly-p1-title"),
+    "weekly-p2": document.getElementById("weekly-p2-title"),
   },
   dailyResetLabel: document.getElementById("daily-reset-label"),
   weeklyResetLabel: document.getElementById("weekly-reset-label"),
-  dailyResetTime: document.getElementById("daily-reset-time"),
+  resetTime: document.getElementById("reset-time"),
   weeklyResetDay: document.getElementById("weekly-reset-day"),
-  weeklyResetTime: document.getElementById("weekly-reset-time"),
+  timezoneOffset: document.getElementById("timezone-offset"),
   person1Name: document.getElementById("person1-name"),
   person2Name: document.getElementById("person2-name"),
   saveStatus: document.getElementById("save-status"),
@@ -67,28 +113,29 @@ const els = {
 initialize();
 
 function initialize() {
+  populateTimezoneOptions();
   hydrateSettingsUI();
   runResetsIfNeeded();
   wireEvents();
   renderAll();
 }
 
+function populateTimezoneOptions() {
+  TIMEZONE_OPTIONS.forEach(([value, label]) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    els.timezoneOffset.appendChild(opt);
+  });
+}
+
 function wireEvents() {
   els.topTabs.forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
 
-  els.personTabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      state.activePerson[tab.dataset.list] = tab.dataset.person;
-      saveState();
-      renderAll();
-    });
-  });
-
   els.statusTabs.forEach((tab) => {
     tab.addEventListener("click", () => {
-      const listType = tab.dataset.list;
-      const personId = state.activePerson[listType];
-      state.filters[listType][personId] = tab.dataset.filter;
+      const { list, person, filter } = tab.dataset;
+      state.filters[list][person] = filter;
       saveState();
       renderAll();
     });
@@ -97,26 +144,24 @@ function wireEvents() {
   els.addForms.forEach((form) => {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      const listType = form.dataset.list;
-      const personId = state.activePerson[listType];
+      const { list, person } = form.dataset;
       const input = form.querySelector("input");
       const text = input.value.trim();
-
       if (text.length < 3) {
-        setFormError(listType, "Task must be at least 3 characters.");
+        setFormError(list, person, "Task must be at least 3 characters.");
         return;
       }
 
-      setFormError(listType, "");
-      state.tasks[listType][personId].push({ id: crypto.randomUUID(), text, done: false });
+      setFormError(list, person, "");
+      state.tasks[list][person].push({ id: crypto.randomUUID(), text, done: false });
       input.value = "";
       saveState();
       renderAll();
     });
   });
 
-  els.dailyResetTime.addEventListener("change", () => {
-    state.settings.dailyResetTime = els.dailyResetTime.value || "00:00";
+  els.resetTime.addEventListener("change", () => {
+    state.settings.resetTime = els.resetTime.value || "00:00";
     saveState();
     runResetsIfNeeded();
     renderAll();
@@ -129,8 +174,8 @@ function wireEvents() {
     renderAll();
   });
 
-  els.weeklyResetTime.addEventListener("change", () => {
-    state.settings.weeklyResetTime = els.weeklyResetTime.value || "00:00";
+  els.timezoneOffset.addEventListener("change", () => {
+    state.settings.timezoneOffset = els.timezoneOffset.value;
     saveState();
     runResetsIfNeeded();
     renderAll();
@@ -156,8 +201,8 @@ function updatePersonName(personId, value) {
   renderAll();
 }
 
-function setFormError(listType, message) {
-  els.lists[listType].error.textContent = message;
+function setFormError(listType, personId, message) {
+  els.lists[listType][personId].error.textContent = message;
 }
 
 function switchView(viewName) {
@@ -167,36 +212,32 @@ function switchView(viewName) {
 
 function renderAll() {
   LIST_TYPES.forEach((listType) => {
-    renderPersonTabs(listType);
-    renderList(listType);
-    syncStatusTabs(listType);
+    PERSON_IDS.forEach((personId) => {
+      renderList(listType, personId);
+      syncStatusTabs(listType, personId);
+      renderPersonTitle(listType, personId);
+    });
   });
   renderResetLabels();
   renderUndoButton();
   hydrateNameInputs();
 }
 
-function renderPersonTabs(listType) {
-  const selectedPerson = state.activePerson[listType];
-  document.querySelectorAll(`.person-tab[data-list="${listType}"]`).forEach((tab) => {
-    const personId = tab.dataset.person;
-    tab.classList.toggle("active", personId === selectedPerson);
-    tab.textContent = state.settings.people[personId];
-  });
+function renderPersonTitle(listType, personId) {
+  els.titleEls[`${listType}-${personId}`].textContent = state.settings.people[personId];
 }
 
-function renderList(listType) {
-  const personId = state.activePerson[listType];
-  const personTasks = state.tasks[listType][personId];
+function renderList(listType, personId) {
+  const taskSet = state.tasks[listType][personId];
   const filter = state.filters[listType][personId];
-  const listEl = els.lists[listType].list;
-  const emptyEl = els.lists[listType].empty;
+  const listEl = els.lists[listType][personId].list;
+  const emptyEl = els.lists[listType][personId].empty;
 
-  const unfinishedCount = personTasks.filter((task) => !task.done).length;
-  const finishedCount = personTasks.length - unfinishedCount;
-  updateTabCount(listType, unfinishedCount, finishedCount);
+  const unfinishedCount = taskSet.filter((task) => !task.done).length;
+  const finishedCount = taskSet.length - unfinishedCount;
+  updateTabCount(listType, personId, unfinishedCount, finishedCount);
 
-  const filtered = personTasks.filter((task) => (filter === "unfinished" ? !task.done : task.done));
+  const filtered = taskSet.filter((task) => (filter === "unfinished" ? !task.done : task.done));
   listEl.innerHTML = "";
 
   filtered.forEach((task) => {
@@ -234,15 +275,14 @@ function renderList(listType) {
   emptyEl.style.display = filtered.length === 0 ? "block" : "none";
 }
 
-function updateTabCount(listType, unfinishedCount, finishedCount) {
-  document.querySelector(`.status-tab[data-list="${listType}"][data-filter="unfinished"]`).textContent = `Unfinished (${unfinishedCount})`;
-  document.querySelector(`.status-tab[data-list="${listType}"][data-filter="finished"]`).textContent = `Finished (${finishedCount})`;
+function updateTabCount(listType, personId, unfinishedCount, finishedCount) {
+  document.querySelector(`.status-tab[data-list="${listType}"][data-person="${personId}"][data-filter="unfinished"]`).textContent = `Unfinished (${unfinishedCount})`;
+  document.querySelector(`.status-tab[data-list="${listType}"][data-person="${personId}"][data-filter="finished"]`).textContent = `Finished (${finishedCount})`;
 }
 
-function syncStatusTabs(listType) {
-  const personId = state.activePerson[listType];
+function syncStatusTabs(listType, personId) {
   const activeFilter = state.filters[listType][personId];
-  document.querySelectorAll(`.status-tab[data-list="${listType}"]`).forEach((tab) => {
+  document.querySelectorAll(`.status-tab[data-list="${listType}"][data-person="${personId}"]`).forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.filter === activeFilter);
   });
 }
@@ -252,9 +292,9 @@ function renderUndoButton() {
 }
 
 function hydrateSettingsUI() {
-  els.dailyResetTime.value = state.settings.dailyResetTime;
+  els.resetTime.value = state.settings.resetTime;
   els.weeklyResetDay.value = String(state.settings.weeklyResetDay);
-  els.weeklyResetTime.value = state.settings.weeklyResetTime;
+  els.timezoneOffset.value = state.settings.timezoneOffset;
   hydrateNameInputs();
 }
 
@@ -265,8 +305,13 @@ function hydrateNameInputs() {
 
 function runResetsIfNeeded() {
   const now = new Date();
-  const nextDailyPeriodId = dailyPeriodId(now, state.settings.dailyResetTime);
-  const nextWeeklyPeriodId = weeklyPeriodId(now, state.settings.weeklyResetDay, state.settings.weeklyResetTime);
+  const nextDailyPeriodId = dailyPeriodId(now, state.settings.resetTime, state.settings.timezoneOffset);
+  const nextWeeklyPeriodId = weeklyPeriodId(
+    now,
+    state.settings.weeklyResetDay,
+    state.settings.resetTime,
+    state.settings.timezoneOffset
+  );
 
   if (state.periodIds.daily !== nextDailyPeriodId) {
     state.periodIds.daily = nextDailyPeriodId;
@@ -287,59 +332,79 @@ function runResetsIfNeeded() {
   saveState();
 }
 
-function dailyPeriodId(now, timeStr) {
-  const [hour, minute] = parseTime(timeStr);
-  const pivot = new Date(now);
-  pivot.setHours(hour, minute, 0, 0);
-  if (now < pivot) pivot.setDate(pivot.getDate() - 1);
-  return dateOnlyId(pivot);
+function parseOffsetToMinutes(offset) {
+  const sign = offset.startsWith("-") ? -1 : 1;
+  const [h, m] = offset.replace("+", "").replace("-", "").split(":").map(Number);
+  return sign * (h * 60 + m);
 }
 
-function weeklyPeriodId(now, resetDay, timeStr) {
-  const [hour, minute] = parseTime(timeStr);
-  const pivot = new Date(now);
-  pivot.setHours(hour, minute, 0, 0);
-  const diffDays = (now.getDay() - resetDay + 7) % 7;
-  pivot.setDate(now.getDate() - diffDays);
-  if (diffDays === 0 && now < pivot) pivot.setDate(pivot.getDate() - 7);
-  return dateOnlyId(pivot);
+function toTimezoneDate(date, offset) {
+  return new Date(date.getTime() + parseOffsetToMinutes(offset) * 60000);
 }
 
-function formatDateTime(date) {
-  return new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" }).format(date);
+function formatDateParts(dateObj) {
+  const yyyy = dateObj.getUTCFullYear();
+  const mm = String(dateObj.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dateObj.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
-function nextDailyReset(now, timeStr) {
+function dailyPeriodId(now, timeStr, offset) {
+  const tzNow = toTimezoneDate(now, offset);
   const [hour, minute] = parseTime(timeStr);
-  const next = new Date(now);
-  next.setHours(hour, minute, 0, 0);
-  if (next <= now) next.setDate(next.getDate() + 1);
+  const pivot = new Date(tzNow);
+  pivot.setUTCHours(hour, minute, 0, 0);
+  if (tzNow < pivot) pivot.setUTCDate(pivot.getUTCDate() - 1);
+  return formatDateParts(pivot);
+}
+
+function weeklyPeriodId(now, resetDay, timeStr, offset) {
+  const tzNow = toTimezoneDate(now, offset);
+  const [hour, minute] = parseTime(timeStr);
+  const pivot = new Date(tzNow);
+  pivot.setUTCHours(hour, minute, 0, 0);
+  const diffDays = (tzNow.getUTCDay() - resetDay + 7) % 7;
+  pivot.setUTCDate(tzNow.getUTCDate() - diffDays);
+  if (diffDays === 0 && tzNow < pivot) pivot.setUTCDate(pivot.getUTCDate() - 7);
+  return formatDateParts(pivot);
+}
+
+function nextDailyReset(now, timeStr, offset) {
+  const tzNow = toTimezoneDate(now, offset);
+  const [hour, minute] = parseTime(timeStr);
+  const next = new Date(tzNow);
+  next.setUTCHours(hour, minute, 0, 0);
+  if (next <= tzNow) next.setUTCDate(next.getUTCDate() + 1);
   return next;
 }
 
-function nextWeeklyReset(now, resetDay, timeStr) {
+function nextWeeklyReset(now, resetDay, timeStr, offset) {
+  const tzNow = toTimezoneDate(now, offset);
   const [hour, minute] = parseTime(timeStr);
-  const next = new Date(now);
-  next.setHours(hour, minute, 0, 0);
-  let daysUntil = (resetDay - now.getDay() + 7) % 7;
-  if (daysUntil === 0 && next <= now) daysUntil = 7;
-  next.setDate(now.getDate() + daysUntil);
+  const next = new Date(tzNow);
+  next.setUTCHours(hour, minute, 0, 0);
+  let daysUntil = (resetDay - tzNow.getUTCDay() + 7) % 7;
+  if (daysUntil === 0 && next <= tzNow) daysUntil = 7;
+  next.setUTCDate(tzNow.getUTCDate() + daysUntil);
   return next;
 }
 
 function renderResetLabels() {
   const now = new Date();
-  els.dailyResetLabel.textContent = `Next reset: ${formatDateTime(nextDailyReset(now, state.settings.dailyResetTime))}`;
-  els.weeklyResetLabel.textContent = `Next reset: ${formatDateTime(nextWeeklyReset(now, state.settings.weeklyResetDay, state.settings.weeklyResetTime))}`;
+  const offset = state.settings.timezoneOffset;
+  const tzLabel = `UTC${offset}`;
+  const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][state.settings.weeklyResetDay];
+
+  const d = nextDailyReset(now, state.settings.resetTime, offset);
+  const w = nextWeeklyReset(now, state.settings.weeklyResetDay, state.settings.resetTime, offset);
+
+  els.dailyResetLabel.textContent = `Next: ${formatDateParts(d)} ${state.settings.resetTime} (${tzLabel})`;
+  els.weeklyResetLabel.textContent = `Next: ${dayName} ${formatDateParts(w)} ${state.settings.resetTime} (${tzLabel})`;
 }
 
 function parseTime(value) {
   const [h = "0", m = "0"] = value.split(":");
   return [Number(h), Number(m)];
-}
-
-function dateOnlyId(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function ensurePersonTaskSet(taskSet) {
@@ -362,24 +427,24 @@ function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return structuredClone(defaultState);
-
     const parsed = JSON.parse(raw);
+
+    const resetTime = parsed?.settings?.resetTime || parsed?.settings?.dailyResetTime || "00:00";
+
     return {
       ...structuredClone(defaultState),
       ...parsed,
       settings: {
         ...defaultState.settings,
         ...parsed.settings,
+        resetTime,
+        timezoneOffset: parsed?.settings?.timezoneOffset || "-08:00",
         people: {
           ...defaultState.settings.people,
           ...(parsed?.settings?.people || {}),
         },
       },
       periodIds: { ...defaultState.periodIds, ...parsed.periodIds },
-      activePerson: {
-        ...defaultState.activePerson,
-        ...parsed.activePerson,
-      },
       filters: {
         daily: ensurePersonFilters(parsed?.filters?.daily),
         weekly: ensurePersonFilters(parsed?.filters?.weekly),
