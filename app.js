@@ -1,12 +1,5 @@
 const STORAGE_KEY = "schedms-data-v1";
 const LIST_TYPES = ["daily", "weekly", "todo"];
-const PERSON_IDS = ["p1", "p2"];
-const CLIENT_ID_KEY = "schedms-client-id";
-const clientId = localStorage.getItem(CLIENT_ID_KEY) || crypto.randomUUID();
-localStorage.setItem(CLIENT_ID_KEY, clientId);
-const gun = window.Gun ? window.Gun(["https://gun-manhattan.herokuapp.com/gun"]) : null;
-let sharedNode = null;
-let remoteUpdatedAt = 0;
 
 const TIMEZONE_OPTIONS = [
   ["-12:00", "UTC-12 (AoE)"],
@@ -49,28 +42,15 @@ const TIMEZONE_OPTIONS = [
   ["+14:00", "UTC+14 (LINT)"],
 ];
 
-const blankPersonTasks = () => ({ p1: [], p2: [] });
-const blankPersonFilters = () => ({ p1: "unfinished", p2: "unfinished" });
-
 const defaultState = {
   settings: {
     resetTime: "00:00",
     weeklyResetDay: 3,
     timezoneOffset: "-08:00",
-    syncRoom: "schedms-public",
-    people: { p1: "Player 1", p2: "Player 2" },
   },
   periodIds: { daily: "", weekly: "" },
-  filters: {
-    daily: blankPersonFilters(),
-    weekly: blankPersonFilters(),
-    todo: blankPersonFilters(),
-  },
-  tasks: {
-    daily: blankPersonTasks(),
-    weekly: blankPersonTasks(),
-    todo: blankPersonTasks(),
-  },
+  filters: { daily: "unfinished", weekly: "unfinished", todo: "unfinished" },
+  tasks: { daily: [], weekly: [], todo: [] },
   undoDelete: null,
 };
 
@@ -85,35 +65,15 @@ const els = {
   statusTabs: document.querySelectorAll(".status-tab"),
   addForms: document.querySelectorAll(".add-task-form"),
   lists: {
-    daily: {
-      p1: { list: document.getElementById("daily-p1-list"), empty: document.getElementById("daily-p1-empty"), error: document.getElementById("daily-p1-error") },
-      p2: { list: document.getElementById("daily-p2-list"), empty: document.getElementById("daily-p2-empty"), error: document.getElementById("daily-p2-error") },
-    },
-    weekly: {
-      p1: { list: document.getElementById("weekly-p1-list"), empty: document.getElementById("weekly-p1-empty"), error: document.getElementById("weekly-p1-error") },
-      p2: { list: document.getElementById("weekly-p2-list"), empty: document.getElementById("weekly-p2-empty"), error: document.getElementById("weekly-p2-error") },
-    },
-    todo: {
-      p1: { list: document.getElementById("todo-p1-list"), empty: document.getElementById("todo-p1-empty"), error: document.getElementById("todo-p1-error") },
-      p2: { list: document.getElementById("todo-p2-list"), empty: document.getElementById("todo-p2-empty"), error: document.getElementById("todo-p2-error") },
-    },
-  },
-  titleEls: {
-    "todo-p1": document.getElementById("todo-p1-title"),
-    "todo-p2": document.getElementById("todo-p2-title"),
-    "daily-p1": document.getElementById("daily-p1-title"),
-    "daily-p2": document.getElementById("daily-p2-title"),
-    "weekly-p1": document.getElementById("weekly-p1-title"),
-    "weekly-p2": document.getElementById("weekly-p2-title"),
+    daily: { list: document.getElementById("daily-list"), empty: document.getElementById("daily-empty"), error: document.getElementById("daily-error") },
+    weekly: { list: document.getElementById("weekly-list"), empty: document.getElementById("weekly-empty"), error: document.getElementById("weekly-error") },
+    todo: { list: document.getElementById("todo-list"), empty: document.getElementById("todo-empty"), error: document.getElementById("todo-error") },
   },
   dailyResetLabel: document.getElementById("daily-reset-label"),
   weeklyResetLabel: document.getElementById("weekly-reset-label"),
   resetTime: document.getElementById("reset-time"),
   weeklyResetDay: document.getElementById("weekly-reset-day"),
   timezoneOffset: document.getElementById("timezone-offset"),
-  syncRoom: document.getElementById("sync-room"),
-  person1Name: document.getElementById("person1-name"),
-  person2Name: document.getElementById("person2-name"),
   saveStatus: document.getElementById("save-status"),
   undoDelete: document.getElementById("undo-delete"),
 };
@@ -125,8 +85,6 @@ function initialize() {
   hydrateSettingsUI();
   runResetsIfNeeded();
   wireEvents();
-  wireRealtimeSync();
-  connectSharedRoom();
   renderAll();
 }
 
@@ -144,8 +102,8 @@ function wireEvents() {
 
   els.statusTabs.forEach((tab) => {
     tab.addEventListener("click", () => {
-      const { list, person, filter } = tab.dataset;
-      state.filters[list][person] = filter;
+      const { list, filter } = tab.dataset;
+      state.filters[list] = filter;
       saveState();
       renderAll();
     });
@@ -154,16 +112,16 @@ function wireEvents() {
   els.addForms.forEach((form) => {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      const { list, person } = form.dataset;
+      const { list } = form.dataset;
       const input = form.querySelector("input");
       const text = input.value.trim();
       if (text.length < 3) {
-        setFormError(list, person, "Task must be at least 3 characters.");
+        setFormError(list, "Task must be at least 3 characters.");
         return;
       }
 
-      setFormError(list, person, "");
-      state.tasks[list][person].push({ id: crypto.randomUUID(), text, done: false });
+      setFormError(list, "");
+      state.tasks[list].push({ id: crypto.randomUUID(), text, done: false });
       input.value = "";
       saveState();
       renderAll();
@@ -191,68 +149,18 @@ function wireEvents() {
     renderAll();
   });
 
-  els.syncRoom.addEventListener("change", () => {
-    const value = els.syncRoom.value.trim();
-    state.settings.syncRoom = value || "schedms-public";
-    connectSharedRoom();
-    saveState();
-    renderAll();
-  });
-
-  els.person1Name.addEventListener("input", () => updatePersonName("p1", els.person1Name.value));
-  els.person2Name.addEventListener("input", () => updatePersonName("p2", els.person2Name.value));
-
   els.undoDelete.addEventListener("click", () => {
     if (!state.undoDelete) return;
-    const { listType, personId, task } = state.undoDelete;
-    state.tasks[listType][personId].push(task);
+    const { listType, task } = state.undoDelete;
+    state.tasks[listType].push(task);
     state.undoDelete = null;
     saveState();
     renderAll();
   });
 }
 
-function wireRealtimeSync() {
-  window.addEventListener("storage", (event) => {
-    if (event.key !== STORAGE_KEY || !event.newValue) return;
-    try {
-      state = mergeLoadedState(JSON.parse(event.newValue));
-      renderAll();
-    } catch {
-      // Ignore malformed storage writes.
-    }
-  });
-}
-
-function connectSharedRoom() {
-  if (!gun) return;
-
-  if (sharedNode) {
-    sharedNode.off();
-  }
-
-  sharedNode = gun.get("schedms").get(state.settings.syncRoom || "schedms-public");
-  sharedNode.on((data) => {
-    if (!data || !data.payload || data.from === clientId || typeof data.updatedAt !== "number") return;
-    if (data.updatedAt <= remoteUpdatedAt) return;
-    remoteUpdatedAt = data.updatedAt;
-
-    state = mergeLoadedState(data.payload);
-    state.settings.syncRoom = state.settings.syncRoom || els.syncRoom.value || "schedms-public";
-    saveState({ skipRemote: true });
-    renderAll();
-  });
-}
-
-function updatePersonName(personId, value) {
-  const clean = value.trim();
-  state.settings.people[personId] = clean || (personId === "p1" ? "Player 1" : "Player 2");
-  saveState();
-  renderAll();
-}
-
-function setFormError(listType, personId, message) {
-  els.lists[listType][personId].error.textContent = message;
+function setFormError(listType, message) {
+  els.lists[listType].error.textContent = message;
 }
 
 function switchView(viewName) {
@@ -262,30 +170,22 @@ function switchView(viewName) {
 
 function renderAll() {
   LIST_TYPES.forEach((listType) => {
-    PERSON_IDS.forEach((personId) => {
-      renderList(listType, personId);
-      syncStatusTabs(listType, personId);
-      renderPersonTitle(listType, personId);
-    });
+    renderList(listType);
+    syncStatusTabs(listType);
   });
   renderResetLabels();
   renderUndoButton();
-  hydrateNameInputs();
 }
 
-function renderPersonTitle(listType, personId) {
-  els.titleEls[`${listType}-${personId}`].textContent = state.settings.people[personId];
-}
-
-function renderList(listType, personId) {
-  const taskSet = state.tasks[listType][personId];
-  const filter = state.filters[listType][personId];
-  const listEl = els.lists[listType][personId].list;
-  const emptyEl = els.lists[listType][personId].empty;
+function renderList(listType) {
+  const taskSet = state.tasks[listType];
+  const filter = state.filters[listType];
+  const listEl = els.lists[listType].list;
+  const emptyEl = els.lists[listType].empty;
 
   const unfinishedCount = taskSet.filter((task) => !task.done).length;
   const finishedCount = taskSet.length - unfinishedCount;
-  updateTabCount(listType, personId, unfinishedCount, finishedCount);
+  updateTabCount(listType, unfinishedCount, finishedCount);
 
   const filtered = taskSet.filter((task) => (filter === "unfinished" ? !task.done : task.done));
   listEl.innerHTML = "";
@@ -314,8 +214,8 @@ function renderList(listType, personId) {
     del.textContent = "remove";
     del.className = "delete-btn";
     del.addEventListener("click", () => {
-      state.tasks[listType][personId] = state.tasks[listType][personId].filter((item) => item.id !== task.id);
-      state.undoDelete = { listType, personId, task };
+      state.tasks[listType] = state.tasks[listType].filter((item) => item.id !== task.id);
+      state.undoDelete = { listType, task };
       saveState();
       renderAll();
     });
@@ -327,14 +227,14 @@ function renderList(listType, personId) {
   emptyEl.style.display = filtered.length === 0 ? "block" : "none";
 }
 
-function updateTabCount(listType, personId, unfinishedCount, finishedCount) {
-  document.querySelector(`.status-tab[data-list="${listType}"][data-person="${personId}"][data-filter="unfinished"]`).textContent = `Unfinished (${unfinishedCount})`;
-  document.querySelector(`.status-tab[data-list="${listType}"][data-person="${personId}"][data-filter="finished"]`).textContent = `Finished (${finishedCount})`;
+function updateTabCount(listType, unfinishedCount, finishedCount) {
+  document.querySelector(`.status-tab[data-list="${listType}"][data-filter="unfinished"]`).textContent = `Unfinished (${unfinishedCount})`;
+  document.querySelector(`.status-tab[data-list="${listType}"][data-filter="finished"]`).textContent = `Finished (${finishedCount})`;
 }
 
-function syncStatusTabs(listType, personId) {
-  const activeFilter = state.filters[listType][personId];
-  document.querySelectorAll(`.status-tab[data-list="${listType}"][data-person="${personId}"]`).forEach((tab) => {
+function syncStatusTabs(listType) {
+  const activeFilter = state.filters[listType];
+  document.querySelectorAll(`.status-tab[data-list="${listType}"]`).forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.filter === activeFilter);
   });
 }
@@ -347,13 +247,6 @@ function hydrateSettingsUI() {
   els.resetTime.value = state.settings.resetTime;
   els.weeklyResetDay.value = String(state.settings.weeklyResetDay);
   els.timezoneOffset.value = state.settings.timezoneOffset;
-  els.syncRoom.value = state.settings.syncRoom || "schedms-public";
-  hydrateNameInputs();
-}
-
-function hydrateNameInputs() {
-  els.person1Name.value = state.settings.people.p1;
-  els.person2Name.value = state.settings.people.p2;
 }
 
 function runResetsIfNeeded() {
@@ -368,18 +261,14 @@ function runResetsIfNeeded() {
 
   if (state.periodIds.daily !== nextDailyPeriodId) {
     state.periodIds.daily = nextDailyPeriodId;
-    PERSON_IDS.forEach((personId) => {
-      state.tasks.daily[personId] = state.tasks.daily[personId].map((task) => ({ ...task, done: false }));
-      state.filters.daily[personId] = "unfinished";
-    });
+    state.tasks.daily = state.tasks.daily.map((task) => ({ ...task, done: false }));
+    state.filters.daily = "unfinished";
   }
 
   if (state.periodIds.weekly !== nextWeeklyPeriodId) {
     state.periodIds.weekly = nextWeeklyPeriodId;
-    PERSON_IDS.forEach((personId) => {
-      state.tasks.weekly[personId] = state.tasks.weekly[personId].map((task) => ({ ...task, done: false }));
-      state.filters.weekly[personId] = "unfinished";
-    });
+    state.tasks.weekly = state.tasks.weekly.map((task) => ({ ...task, done: false }));
+    state.filters.weekly = "unfinished";
   }
 
   saveState();
@@ -422,37 +311,19 @@ function weeklyPeriodId(now, resetDay, timeStr, offset) {
   return formatDateParts(pivot);
 }
 
-function nextDailyReset(now, timeStr, offset) {
-  const tzNow = toTimezoneDate(now, offset);
-  const [hour, minute] = parseTime(timeStr);
-  const next = new Date(tzNow);
-  next.setUTCHours(hour, minute, 0, 0);
-  if (next <= tzNow) next.setUTCDate(next.getUTCDate() + 1);
-  return next;
-}
-
-function nextWeeklyReset(now, resetDay, timeStr, offset) {
-  const tzNow = toTimezoneDate(now, offset);
-  const [hour, minute] = parseTime(timeStr);
-  const next = new Date(tzNow);
-  next.setUTCHours(hour, minute, 0, 0);
-  let daysUntil = (resetDay - tzNow.getUTCDay() + 7) % 7;
-  if (daysUntil === 0 && next <= tzNow) daysUntil = 7;
-  next.setUTCDate(tzNow.getUTCDate() + daysUntil);
-  return next;
+function formatResetTime12h(timeStr) {
+  const [h, m] = parseTime(timeStr);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 function renderResetLabels() {
-  const now = new Date();
-  const offset = state.settings.timezoneOffset;
-  const tzLabel = `UTC${offset}`;
-  const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][state.settings.weeklyResetDay];
+  const resetTime = formatResetTime12h(state.settings.resetTime);
+  const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][state.settings.weeklyResetDay];
 
-  const d = nextDailyReset(now, state.settings.resetTime, offset);
-  const w = nextWeeklyReset(now, state.settings.weeklyResetDay, state.settings.resetTime, offset);
-
-  els.dailyResetLabel.textContent = `Next: ${formatDateParts(d)} ${state.settings.resetTime} (${tzLabel})`;
-  els.weeklyResetLabel.textContent = `Next: ${dayName} ${formatDateParts(w)} ${state.settings.resetTime} (${tzLabel})`;
+  els.dailyResetLabel.textContent = `Reset: ${resetTime}`;
+  els.weeklyResetLabel.textContent = `Reset: ${resetTime} ${dayName}`;
 }
 
 function parseTime(value) {
@@ -460,73 +331,53 @@ function parseTime(value) {
   return [Number(h), Number(m)];
 }
 
-function ensurePersonTaskSet(taskSet) {
-  if (!taskSet || typeof taskSet !== "object") return blankPersonTasks();
-  return {
-    p1: Array.isArray(taskSet.p1) ? taskSet.p1 : [],
-    p2: Array.isArray(taskSet.p2) ? taskSet.p2 : [],
-  };
+function normalizeFilter(filter) {
+  return filter === "finished" ? "finished" : "unfinished";
 }
 
-function ensurePersonFilters(filters) {
-  if (!filters || typeof filters !== "object") return blankPersonFilters();
-  return {
-    p1: filters.p1 === "finished" ? "finished" : "unfinished",
-    p2: filters.p2 === "finished" ? "finished" : "unfinished",
-  };
+function normalizeTaskSet(taskSet) {
+  if (!Array.isArray(taskSet)) return [];
+  return taskSet
+    .map((task) => ({
+      id: String(task?.id || crypto.randomUUID()),
+      text: String(task?.text || "").trim(),
+      done: Boolean(task?.done),
+    }))
+    .filter((task) => task.text.length > 0);
 }
 
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return structuredClone(defaultState);
-    return mergeLoadedState(JSON.parse(raw));
+    const parsed = JSON.parse(raw);
+
+    return {
+      ...structuredClone(defaultState),
+      ...parsed,
+      settings: {
+        ...defaultState.settings,
+        ...parsed.settings,
+      },
+      periodIds: { ...defaultState.periodIds, ...parsed.periodIds },
+      filters: {
+        daily: normalizeFilter(parsed?.filters?.daily),
+        weekly: normalizeFilter(parsed?.filters?.weekly),
+        todo: normalizeFilter(parsed?.filters?.todo),
+      },
+      tasks: {
+        daily: normalizeTaskSet(parsed?.tasks?.daily),
+        weekly: normalizeTaskSet(parsed?.tasks?.weekly),
+        todo: normalizeTaskSet(parsed?.tasks?.todo),
+      },
+      undoDelete: null,
+    };
   } catch {
     return structuredClone(defaultState);
   }
 }
 
-function mergeLoadedState(parsed) {
-  const resetTime = parsed?.settings?.resetTime || parsed?.settings?.dailyResetTime || "00:00";
-
-  return {
-    ...structuredClone(defaultState),
-    ...parsed,
-      settings: {
-        ...defaultState.settings,
-        ...parsed.settings,
-        resetTime,
-        timezoneOffset: parsed?.settings?.timezoneOffset || "-08:00",
-        syncRoom: parsed?.settings?.syncRoom || "schedms-public",
-        people: {
-          ...defaultState.settings.people,
-          ...(parsed?.settings?.people || {}),
-      },
-    },
-    periodIds: { ...defaultState.periodIds, ...parsed.periodIds },
-    filters: {
-      daily: ensurePersonFilters(parsed?.filters?.daily),
-      weekly: ensurePersonFilters(parsed?.filters?.weekly),
-      todo: ensurePersonFilters(parsed?.filters?.todo),
-    },
-    tasks: {
-      daily: ensurePersonTaskSet(parsed?.tasks?.daily),
-      weekly: ensurePersonTaskSet(parsed?.tasks?.weekly),
-      todo: ensurePersonTaskSet(parsed?.tasks?.todo),
-    },
-    undoDelete: null,
-  };
-}
-
-function saveState(options = {}) {
-  const { skipRemote = false } = options;
+function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   els.saveStatus.textContent = `Auto-saved at ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-
-  if (!skipRemote && sharedNode) {
-    const payload = { ...state, undoDelete: null };
-    const updatedAt = Date.now();
-    remoteUpdatedAt = updatedAt;
-    sharedNode.put({ payload, from: clientId, updatedAt });
-  }
 }
