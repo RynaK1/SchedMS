@@ -9,8 +9,11 @@
   <body>
     <main class="app">
       <header class="app-header">
-        <h1>SchedMS</h1>
-        <p>Minimal MapleStory daily/weekly/todo tracker</p>
+        <div>
+          <h1>SchedMS</h1>
+          <p>MapleStory planner with persistent goals + repeating dailies/weeklies</p>
+        </div>
+        <div class="status-pill" id="save-status">Auto-saved</div>
       </header>
 
       <nav class="top-tabs" aria-label="Main navigation tabs">
@@ -19,54 +22,13 @@
       </nav>
 
       <section id="lists-view" class="view active">
-        <div class="list-grid">
-          <section class="todo-card" data-list="daily">
+        <section class="layout-main">
+          <section class="todo-card todo-primary" data-list="todo">
             <div class="card-header">
-              <h2>Daily</h2>
-              <span id="daily-reset-label" class="reset-label"></span>
+              <h2>Main To-Do</h2>
+              <span class="reset-label">Persistent list</span>
             </div>
-
-            <div class="status-tabs" role="tablist" aria-label="Daily task status tabs">
-              <button class="status-tab active" data-list="daily" data-filter="unfinished">Unfinished</button>
-              <button class="status-tab" data-list="daily" data-filter="finished">Finished</button>
-            </div>
-
-            <form class="add-task-form" data-list="daily">
-              <label class="sr-only" for="daily-task-input">Add daily task</label>
-              <input id="daily-task-input" type="text" maxlength="120" placeholder="Add daily MapleStory task..." required />
-              <button type="submit">Add</button>
-            </form>
-
-            <ul id="daily-task-list" class="task-list"></ul>
-            <p id="daily-empty" class="empty-msg">No tasks in this tab yet.</p>
-          </section>
-
-          <section class="todo-card" data-list="weekly">
-            <div class="card-header">
-              <h2>Weekly</h2>
-              <span id="weekly-reset-label" class="reset-label"></span>
-            </div>
-
-            <div class="status-tabs" role="tablist" aria-label="Weekly task status tabs">
-              <button class="status-tab active" data-list="weekly" data-filter="unfinished">Unfinished</button>
-              <button class="status-tab" data-list="weekly" data-filter="finished">Finished</button>
-            </div>
-
-            <form class="add-task-form" data-list="weekly">
-              <label class="sr-only" for="weekly-task-input">Add weekly task</label>
-              <input id="weekly-task-input" type="text" maxlength="120" placeholder="Add weekly MapleStory task..." required />
-              <button type="submit">Add</button>
-            </form>
-
-            <ul id="weekly-task-list" class="task-list"></ul>
-            <p id="weekly-empty" class="empty-msg">No tasks in this tab yet.</p>
-          </section>
-
-          <section class="todo-card" data-list="todo">
-            <div class="card-header">
-              <h2>To-Do</h2>
-              <span class="reset-label">No auto reset</span>
-            </div>
+            <p class="subcopy">Use this for one-off goals, upgrades, and long-term account plans.</p>
 
             <div class="status-tabs" role="tablist" aria-label="To-Do task status tabs">
               <button class="status-tab active" data-list="todo" data-filter="unfinished">Unfinished</button>
@@ -75,20 +37,70 @@
 
             <form class="add-task-form" data-list="todo">
               <label class="sr-only" for="todo-task-input">Add to-do task</label>
-              <input id="todo-task-input" type="text" maxlength="120" placeholder="Add persistent MapleStory to-do..." required />
+              <input id="todo-task-input" type="text" maxlength="120" placeholder="e.g., Save mesos for Arcane Umbra weapon" required />
               <button type="submit">Add</button>
             </form>
+            <p id="todo-error" class="form-msg" role="alert"></p>
 
             <ul id="todo-task-list" class="task-list"></ul>
             <p id="todo-empty" class="empty-msg">No tasks in this tab yet.</p>
           </section>
-        </div>
+
+          <aside class="side-lists">
+            <section class="todo-card daily-card" data-list="daily">
+              <div class="card-header">
+                <h2>Daily</h2>
+                <span id="daily-reset-label" class="reset-label"></span>
+              </div>
+              <div class="status-tabs" role="tablist" aria-label="Daily task status tabs">
+                <button class="status-tab active" data-list="daily" data-filter="unfinished">Unfinished</button>
+                <button class="status-tab" data-list="daily" data-filter="finished">Finished</button>
+              </div>
+
+              <form class="add-task-form" data-list="daily">
+                <label class="sr-only" for="daily-task-input">Add daily task</label>
+                <input id="daily-task-input" type="text" maxlength="120" placeholder="e.g., Monster Park runs" required />
+                <button type="submit">Add</button>
+              </form>
+              <p id="daily-error" class="form-msg" role="alert"></p>
+
+              <ul id="daily-task-list" class="task-list"></ul>
+              <p id="daily-empty" class="empty-msg">No tasks in this tab yet.</p>
+            </section>
+
+            <section class="todo-card weekly-card" data-list="weekly">
+              <div class="card-header">
+                <h2>Weekly</h2>
+                <span id="weekly-reset-label" class="reset-label"></span>
+              </div>
+              <div class="status-tabs" role="tablist" aria-label="Weekly task status tabs">
+                <button class="status-tab active" data-list="weekly" data-filter="unfinished">Unfinished</button>
+                <button class="status-tab" data-list="weekly" data-filter="finished">Finished</button>
+              </div>
+
+              <form class="add-task-form" data-list="weekly">
+                <label class="sr-only" for="weekly-task-input">Add weekly task</label>
+                <input id="weekly-task-input" type="text" maxlength="120" placeholder="e.g., Weekly bossing set" required />
+                <button type="submit">Add</button>
+              </form>
+              <p id="weekly-error" class="form-msg" role="alert"></p>
+
+              <ul id="weekly-task-list" class="task-list"></ul>
+              <p id="weekly-empty" class="empty-msg">No tasks in this tab yet.</p>
+            </section>
+          </aside>
+        </section>
+
+        <section class="tool-row">
+          <button id="undo-delete" class="ghost-btn" disabled>Undo last delete</button>
+          <p class="hint">Tip: Daily/Weekly tasks reset to unfinished at your configured reset time.</p>
+        </section>
       </section>
 
       <section id="options-view" class="view">
         <section class="todo-card options-card">
           <h2>Reset Options</h2>
-          <p>Pick when your lists reset. Changes save automatically.</p>
+          <p>Pick when your repeating lists reset. Changes save automatically.</p>
 
           <div class="option-row">
             <label for="daily-reset-time">Daily reset time</label>
@@ -113,7 +125,12 @@
             <input id="weekly-reset-time" type="time" />
           </div>
 
-          <p class="hint">Tip: Keep this aligned with your in-game reset schedule.</p>
+          <h3>How this works</h3>
+          <ul class="help-list">
+            <li>Main To-Do never auto-resets.</li>
+            <li>Daily and Weekly tasks stay in the list and are marked unfinished on reset.</li>
+            <li>After each Daily/Weekly reset, that list automatically opens Unfinished tab.</li>
+          </ul>
         </section>
       </section>
     </main>

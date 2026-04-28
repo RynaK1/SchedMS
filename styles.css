@@ -6,13 +6,13 @@
   --accent: #7aa6ff;
   --accent-soft: #243656;
   --border: #2a2f38;
-  --success: #79cf91;
+  --daily: #2a3f2e;
+  --weekly: #3f2a3a;
+  --primary: #1e2d47;
+  --error: #ff8c8c;
 }
 
-* {
-  box-sizing: border-box;
-}
-
+* { box-sizing: border-box; }
 body {
   margin: 0;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
@@ -20,30 +20,22 @@ body {
   color: var(--text);
 }
 
-.app {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 1.25rem;
+.app { max-width: 1100px; margin: 0 auto; padding: 1.25rem; }
+.app-header { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.app-header h1 { margin: 0; }
+.app-header p { margin: 0.35rem 0 1.2rem; color: var(--muted); }
+
+.status-pill {
+  background: #162334;
+  border: 1px solid #30527b;
+  color: #b8d6ff;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
 }
 
-.app-header h1 {
-  margin: 0;
-}
-
-.app-header p {
-  margin: 0.35rem 0 1.2rem;
-  color: var(--muted);
-}
-
-.top-tabs,
-.status-tabs {
-  display: inline-flex;
-  gap: 0.5rem;
-}
-
-.top-tab,
-.status-tab,
-button {
+.top-tabs, .status-tabs { display: inline-flex; gap: 0.5rem; }
+.top-tab, .status-tab, button {
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text);
@@ -51,25 +43,20 @@ button {
   padding: 0.45rem 0.8rem;
   cursor: pointer;
 }
+.top-tab.active, .status-tab.active { background: var(--accent-soft); border-color: var(--accent); }
 
-.top-tab.active,
-.status-tab.active {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-}
+.view { display: none; }
+.view.active { display: block; }
 
-.view {
-  display: none;
-}
-
-.view.active {
-  display: block;
-}
-
-.list-grid {
+.layout-main {
   margin-top: 1rem;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  grid-template-columns: 1.35fr 1fr;
+  gap: 1rem;
+}
+
+.side-lists {
+  display: grid;
   gap: 1rem;
 }
 
@@ -80,32 +67,30 @@ button {
   padding: 1rem;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.75rem;
-}
+.todo-primary { background: linear-gradient(180deg, var(--primary), #1a1c20); }
+.daily-card { background: linear-gradient(180deg, var(--daily), #1a1c20); }
+.weekly-card { background: linear-gradient(180deg, var(--weekly), #1a1c20); }
 
-.reset-label {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
+.card-header { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; }
+.subcopy, .reset-label, .empty-msg, .hint { color: var(--muted); }
+.subcopy { margin: 0.2rem 0 0.65rem; }
+.reset-label { font-size: 0.85rem; }
 
-.add-task-form {
-  margin: 0.9rem 0;
-  display: flex;
-  gap: 0.45rem;
-}
-
-input,
-select {
+.add-task-form { margin: 0.75rem 0 0.35rem; display: flex; gap: 0.45rem; }
+input, select {
   width: 100%;
   background: #13161a;
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.5rem;
+}
+
+.form-msg {
+  min-height: 1em;
+  margin: 0 0 0.5rem;
+  color: var(--error);
+  font-size: 0.85rem;
 }
 
 .task-list {
@@ -126,40 +111,23 @@ select {
   border-radius: 8px;
   padding: 0.5rem 0.55rem;
 }
+.task-item label { display: flex; align-items: center; gap: 0.55rem; }
+.task-item.done span { text-decoration: line-through; color: var(--muted); }
+.delete-btn { border-color: #60333a; }
 
-.task-item label {
+.tool-row {
+  margin-top: 0.9rem;
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.75rem;
+  justify-content: space-between;
 }
 
-.task-item.done span {
-  text-decoration: line-through;
-  color: var(--muted);
-}
+.ghost-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 
-.delete-btn {
-  border-color: #60333a;
-}
-
-.empty-msg {
-  color: var(--muted);
-  margin: 0.75rem 0 0;
-}
-
-.option-row {
-  margin-top: 0.95rem;
-}
-
-.option-row label {
-  display: block;
-  margin-bottom: 0.35rem;
-}
-
-.hint {
-  color: var(--muted);
-  margin-top: 1rem;
-}
+.option-row { margin-top: 0.95rem; }
+.option-row label { display: block; margin-bottom: 0.35rem; }
+.help-list { color: var(--muted); margin: 0.4rem 0 0; padding-left: 1.2rem; }
 
 .sr-only {
   position: absolute;
@@ -171,4 +139,8 @@ select {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+@media (max-width: 860px) {
+  .layout-main { grid-template-columns: 1fr; }
 }
