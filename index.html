@@ -182,10 +182,15 @@
             <label for="timezone-offset">Time zone</label>
             <select id="timezone-offset"></select>
           </div>
+          <div class="option-row">
+            <label for="sync-room">Realtime sync room</label>
+            <input id="sync-room" type="text" maxlength="60" placeholder="shared-room-name" />
+          </div>
         </section>
       </section>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

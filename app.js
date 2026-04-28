@@ -1,6 +1,12 @@
 const STORAGE_KEY = "schedms-data-v1";
 const LIST_TYPES = ["daily", "weekly", "todo"];
 const PERSON_IDS = ["p1", "p2"];
+const CLIENT_ID_KEY = "schedms-client-id";
+const clientId = localStorage.getItem(CLIENT_ID_KEY) || crypto.randomUUID();
+localStorage.setItem(CLIENT_ID_KEY, clientId);
+const gun = window.Gun ? window.Gun(["https://gun-manhattan.herokuapp.com/gun"]) : null;
+let sharedNode = null;
+let remoteUpdatedAt = 0;
 
 const TIMEZONE_OPTIONS = [
   ["-12:00", "UTC-12 (AoE)"],
@@ -51,6 +57,7 @@ const defaultState = {
     resetTime: "00:00",
     weeklyResetDay: 3,
     timezoneOffset: "-08:00",
+    syncRoom: "schedms-public",
     people: { p1: "Player 1", p2: "Player 2" },
   },
   periodIds: { daily: "", weekly: "" },
@@ -104,6 +111,7 @@ const els = {
   resetTime: document.getElementById("reset-time"),
   weeklyResetDay: document.getElementById("weekly-reset-day"),
   timezoneOffset: document.getElementById("timezone-offset"),
+  syncRoom: document.getElementById("sync-room"),
   person1Name: document.getElementById("person1-name"),
   person2Name: document.getElementById("person2-name"),
   saveStatus: document.getElementById("save-status"),
@@ -118,6 +126,7 @@ function initialize() {
   runResetsIfNeeded();
   wireEvents();
   wireRealtimeSync();
+  connectSharedRoom();
   renderAll();
 }
 
@@ -182,6 +191,14 @@ function wireEvents() {
     renderAll();
   });
 
+  els.syncRoom.addEventListener("change", () => {
+    const value = els.syncRoom.value.trim();
+    state.settings.syncRoom = value || "schedms-public";
+    connectSharedRoom();
+    saveState();
+    renderAll();
+  });
+
   els.person1Name.addEventListener("input", () => updatePersonName("p1", els.person1Name.value));
   els.person2Name.addEventListener("input", () => updatePersonName("p2", els.person2Name.value));
 
@@ -204,6 +221,26 @@ function wireRealtimeSync() {
     } catch {
       // Ignore malformed storage writes.
     }
+  });
+}
+
+function connectSharedRoom() {
+  if (!gun) return;
+
+  if (sharedNode) {
+    sharedNode.off();
+  }
+
+  sharedNode = gun.get("schedms").get(state.settings.syncRoom || "schedms-public");
+  sharedNode.on((data) => {
+    if (!data || !data.payload || data.from === clientId || typeof data.updatedAt !== "number") return;
+    if (data.updatedAt <= remoteUpdatedAt) return;
+    remoteUpdatedAt = data.updatedAt;
+
+    state = mergeLoadedState(data.payload);
+    state.settings.syncRoom = state.settings.syncRoom || els.syncRoom.value || "schedms-public";
+    saveState({ skipRemote: true });
+    renderAll();
   });
 }
 
@@ -310,6 +347,7 @@ function hydrateSettingsUI() {
   els.resetTime.value = state.settings.resetTime;
   els.weeklyResetDay.value = String(state.settings.weeklyResetDay);
   els.timezoneOffset.value = state.settings.timezoneOffset;
+  els.syncRoom.value = state.settings.syncRoom || "schedms-public";
   hydrateNameInputs();
 }
 
@@ -454,14 +492,15 @@ function mergeLoadedState(parsed) {
   return {
     ...structuredClone(defaultState),
     ...parsed,
-    settings: {
-      ...defaultState.settings,
-      ...parsed.settings,
-      resetTime,
-      timezoneOffset: parsed?.settings?.timezoneOffset || "-08:00",
-      people: {
-        ...defaultState.settings.people,
-        ...(parsed?.settings?.people || {}),
+      settings: {
+        ...defaultState.settings,
+        ...parsed.settings,
+        resetTime,
+        timezoneOffset: parsed?.settings?.timezoneOffset || "-08:00",
+        syncRoom: parsed?.settings?.syncRoom || "schedms-public",
+        people: {
+          ...defaultState.settings.people,
+          ...(parsed?.settings?.people || {}),
       },
     },
     periodIds: { ...defaultState.periodIds, ...parsed.periodIds },
@@ -479,7 +518,15 @@ function mergeLoadedState(parsed) {
   };
 }
 
-function saveState() {
+function saveState(options = {}) {
+  const { skipRemote = false } = options;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   els.saveStatus.textContent = `Auto-saved at ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+
+  if (!skipRemote && sharedNode) {
+    const payload = { ...state, undoDelete: null };
+    const updatedAt = Date.now();
+    remoteUpdatedAt = updatedAt;
+    sharedNode.put({ payload, from: clientId, updatedAt });
+  }
 }
