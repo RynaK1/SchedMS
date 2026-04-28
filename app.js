@@ -1,4 +1,5 @@
 const STORAGE_KEY = "schedms-data-v1";
+const LIST_TYPES = ["daily", "weekly", "todo"];
 
 const defaultState = {
   settings: {
@@ -13,10 +14,12 @@ const defaultState = {
   filters: {
     daily: "unfinished",
     weekly: "unfinished",
+    todo: "unfinished",
   },
   tasks: {
     daily: [],
     weekly: [],
+    todo: [],
   },
 };
 
@@ -30,10 +33,20 @@ const els = {
   topTabs: document.querySelectorAll(".top-tab"),
   statusTabs: document.querySelectorAll(".status-tab"),
   addForms: document.querySelectorAll(".add-task-form"),
-  dailyList: document.getElementById("daily-task-list"),
-  weeklyList: document.getElementById("weekly-task-list"),
-  dailyEmpty: document.getElementById("daily-empty"),
-  weeklyEmpty: document.getElementById("weekly-empty"),
+  lists: {
+    daily: {
+      list: document.getElementById("daily-task-list"),
+      empty: document.getElementById("daily-empty"),
+    },
+    weekly: {
+      list: document.getElementById("weekly-task-list"),
+      empty: document.getElementById("weekly-empty"),
+    },
+    todo: {
+      list: document.getElementById("todo-task-list"),
+      empty: document.getElementById("todo-empty"),
+    },
+  },
   dailyResetLabel: document.getElementById("daily-reset-label"),
   weeklyResetLabel: document.getElementById("weekly-reset-label"),
   dailyResetTime: document.getElementById("daily-reset-time"),
@@ -118,17 +131,16 @@ function switchView(viewName) {
 }
 
 function renderAll() {
-  renderList("daily");
-  renderList("weekly");
-  syncStatusTabs("daily");
-  syncStatusTabs("weekly");
+  LIST_TYPES.forEach((listType) => {
+    renderList(listType);
+    syncStatusTabs(listType);
+  });
   renderResetLabels();
 }
 
 function renderList(listType) {
-  const listEl = listType === "daily" ? els.dailyList : els.weeklyList;
-  const emptyEl = listType === "daily" ? els.dailyEmpty : els.weeklyEmpty;
-
+  const listEl = els.lists[listType].list;
+  const emptyEl = els.lists[listType].empty;
   const filter = state.filters[listType];
   const filtered = state.tasks[listType].filter((task) =>
     filter === "unfinished" ? !task.done : task.done
@@ -152,7 +164,6 @@ function renderList(listType) {
 
     const text = document.createElement("span");
     text.textContent = task.text;
-
     label.append(check, text);
 
     const del = document.createElement("button");
@@ -195,12 +206,14 @@ function runResetsIfNeeded() {
 
   if (state.periodIds.daily !== nextDailyPeriodId) {
     state.periodIds.daily = nextDailyPeriodId;
-    state.tasks.daily = [];
+    state.tasks.daily = state.tasks.daily.map((task) => ({ ...task, done: false }));
+    state.filters.daily = "unfinished";
   }
 
   if (state.periodIds.weekly !== nextWeeklyPeriodId) {
     state.periodIds.weekly = nextWeeklyPeriodId;
-    state.tasks.weekly = [];
+    state.tasks.weekly = state.tasks.weekly.map((task) => ({ ...task, done: false }));
+    state.filters.weekly = "unfinished";
   }
 
   saveState();
@@ -275,6 +288,7 @@ function loadState() {
       tasks: {
         daily: Array.isArray(parsed?.tasks?.daily) ? parsed.tasks.daily : [],
         weekly: Array.isArray(parsed?.tasks?.weekly) ? parsed.tasks.weekly : [],
+        todo: Array.isArray(parsed?.tasks?.todo) ? parsed.tasks.todo : [],
       },
     };
   } catch {

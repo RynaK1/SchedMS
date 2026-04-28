@@ -1,301 +1,123 @@
-const STORAGE_KEY = "schedms-data-v1";
-const LIST_TYPES = ["daily", "weekly", "todo"];
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SchedMS - MapleStory To-Do</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>SchedMS</h1>
+        <p>Minimal MapleStory daily/weekly/todo tracker</p>
+      </header>
 
-const defaultState = {
-  settings: {
-    dailyResetTime: "00:00",
-    weeklyResetDay: 3,
-    weeklyResetTime: "00:00",
-  },
-  periodIds: {
-    daily: "",
-    weekly: "",
-  },
-  filters: {
-    daily: "unfinished",
-    weekly: "unfinished",
-    todo: "unfinished",
-  },
-  tasks: {
-    daily: [],
-    weekly: [],
-    todo: [],
-  },
-};
+      <nav class="top-tabs" aria-label="Main navigation tabs">
+        <button class="top-tab active" data-view="lists">Lists</button>
+        <button class="top-tab" data-view="options">Options</button>
+      </nav>
 
-let state = loadState();
+      <section id="lists-view" class="view active">
+        <div class="list-grid">
+          <section class="todo-card" data-list="daily">
+            <div class="card-header">
+              <h2>Daily</h2>
+              <span id="daily-reset-label" class="reset-label"></span>
+            </div>
 
-const els = {
-  views: {
-    lists: document.getElementById("lists-view"),
-    options: document.getElementById("options-view"),
-  },
-  topTabs: document.querySelectorAll(".top-tab"),
-  statusTabs: document.querySelectorAll(".status-tab"),
-  addForms: document.querySelectorAll(".add-task-form"),
-  lists: {
-    daily: {
-      list: document.getElementById("daily-task-list"),
-      empty: document.getElementById("daily-empty"),
-    },
-    weekly: {
-      list: document.getElementById("weekly-task-list"),
-      empty: document.getElementById("weekly-empty"),
-    },
-    todo: {
-      list: document.getElementById("todo-task-list"),
-      empty: document.getElementById("todo-empty"),
-    },
-  },
-  dailyResetLabel: document.getElementById("daily-reset-label"),
-  weeklyResetLabel: document.getElementById("weekly-reset-label"),
-  dailyResetTime: document.getElementById("daily-reset-time"),
-  weeklyResetDay: document.getElementById("weekly-reset-day"),
-  weeklyResetTime: document.getElementById("weekly-reset-time"),
-};
+            <div class="status-tabs" role="tablist" aria-label="Daily task status tabs">
+              <button class="status-tab active" data-list="daily" data-filter="unfinished">Unfinished</button>
+              <button class="status-tab" data-list="daily" data-filter="finished">Finished</button>
+            </div>
 
-initialize();
+            <form class="add-task-form" data-list="daily">
+              <label class="sr-only" for="daily-task-input">Add daily task</label>
+              <input id="daily-task-input" type="text" maxlength="120" placeholder="Add daily MapleStory task..." required />
+              <button type="submit">Add</button>
+            </form>
 
-function initialize() {
-  hydrateSettingsUI();
-  runResetsIfNeeded();
-  wireEvents();
-  renderAll();
-}
+            <ul id="daily-task-list" class="task-list"></ul>
+            <p id="daily-empty" class="empty-msg">No tasks in this tab yet.</p>
+          </section>
 
-function wireEvents() {
-  els.topTabs.forEach((tab) => {
-    tab.addEventListener("click", () => switchView(tab.dataset.view));
-  });
+          <section class="todo-card" data-list="weekly">
+            <div class="card-header">
+              <h2>Weekly</h2>
+              <span id="weekly-reset-label" class="reset-label"></span>
+            </div>
 
-  els.statusTabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const listType = tab.dataset.list;
-      state.filters[listType] = tab.dataset.filter;
-      saveState();
-      renderList(listType);
-      syncStatusTabs(listType);
-    });
-  });
+            <div class="status-tabs" role="tablist" aria-label="Weekly task status tabs">
+              <button class="status-tab active" data-list="weekly" data-filter="unfinished">Unfinished</button>
+              <button class="status-tab" data-list="weekly" data-filter="finished">Finished</button>
+            </div>
 
-  els.addForms.forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const listType = form.dataset.list;
-      const input = form.querySelector("input");
-      const text = input.value.trim();
-      if (!text) return;
+            <form class="add-task-form" data-list="weekly">
+              <label class="sr-only" for="weekly-task-input">Add weekly task</label>
+              <input id="weekly-task-input" type="text" maxlength="120" placeholder="Add weekly MapleStory task..." required />
+              <button type="submit">Add</button>
+            </form>
 
-      state.tasks[listType].push({
-        id: crypto.randomUUID(),
-        text,
-        done: false,
-      });
+            <ul id="weekly-task-list" class="task-list"></ul>
+            <p id="weekly-empty" class="empty-msg">No tasks in this tab yet.</p>
+          </section>
 
-      input.value = "";
-      saveState();
-      renderList(listType);
-    });
-  });
+          <section class="todo-card" data-list="todo">
+            <div class="card-header">
+              <h2>To-Do</h2>
+              <span class="reset-label">No auto reset</span>
+            </div>
 
-  els.dailyResetTime.addEventListener("change", () => {
-    state.settings.dailyResetTime = els.dailyResetTime.value || "00:00";
-    saveState();
-    runResetsIfNeeded();
-    renderAll();
-  });
+            <div class="status-tabs" role="tablist" aria-label="To-Do task status tabs">
+              <button class="status-tab active" data-list="todo" data-filter="unfinished">Unfinished</button>
+              <button class="status-tab" data-list="todo" data-filter="finished">Finished</button>
+            </div>
 
-  els.weeklyResetDay.addEventListener("change", () => {
-    state.settings.weeklyResetDay = Number(els.weeklyResetDay.value);
-    saveState();
-    runResetsIfNeeded();
-    renderAll();
-  });
+            <form class="add-task-form" data-list="todo">
+              <label class="sr-only" for="todo-task-input">Add to-do task</label>
+              <input id="todo-task-input" type="text" maxlength="120" placeholder="Add persistent MapleStory to-do..." required />
+              <button type="submit">Add</button>
+            </form>
 
-  els.weeklyResetTime.addEventListener("change", () => {
-    state.settings.weeklyResetTime = els.weeklyResetTime.value || "00:00";
-    saveState();
-    runResetsIfNeeded();
-    renderAll();
-  });
-}
+            <ul id="todo-task-list" class="task-list"></ul>
+            <p id="todo-empty" class="empty-msg">No tasks in this tab yet.</p>
+          </section>
+        </div>
+      </section>
 
-function switchView(viewName) {
-  Object.entries(els.views).forEach(([name, section]) => {
-    section.classList.toggle("active", name === viewName);
-  });
+      <section id="options-view" class="view">
+        <section class="todo-card options-card">
+          <h2>Reset Options</h2>
+          <p>Pick when your lists reset. Changes save automatically.</p>
 
-  els.topTabs.forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.view === viewName);
-  });
-}
+          <div class="option-row">
+            <label for="daily-reset-time">Daily reset time</label>
+            <input id="daily-reset-time" type="time" />
+          </div>
 
-function renderAll() {
-  LIST_TYPES.forEach((listType) => {
-    renderList(listType);
-    syncStatusTabs(listType);
-  });
-  renderResetLabels();
-}
+          <div class="option-row">
+            <label for="weekly-reset-day">Weekly reset day</label>
+            <select id="weekly-reset-day">
+              <option value="0">Sunday</option>
+              <option value="1">Monday</option>
+              <option value="2">Tuesday</option>
+              <option value="3">Wednesday</option>
+              <option value="4">Thursday</option>
+              <option value="5">Friday</option>
+              <option value="6">Saturday</option>
+            </select>
+          </div>
 
-function renderList(listType) {
-  const listEl = els.lists[listType].list;
-  const emptyEl = els.lists[listType].empty;
-  const filter = state.filters[listType];
-  const filtered = state.tasks[listType].filter((task) =>
-    filter === "unfinished" ? !task.done : task.done
-  );
+          <div class="option-row">
+            <label for="weekly-reset-time">Weekly reset time</label>
+            <input id="weekly-reset-time" type="time" />
+          </div>
 
-  listEl.innerHTML = "";
+          <p class="hint">Tip: Keep this aligned with your in-game reset schedule.</p>
+        </section>
+      </section>
+    </main>
 
-  filtered.forEach((task) => {
-    const li = document.createElement("li");
-    li.className = `task-item ${task.done ? "done" : ""}`;
-
-    const label = document.createElement("label");
-    const check = document.createElement("input");
-    check.type = "checkbox";
-    check.checked = task.done;
-    check.addEventListener("change", () => {
-      task.done = check.checked;
-      saveState();
-      renderList(listType);
-    });
-
-    const text = document.createElement("span");
-    text.textContent = task.text;
-    label.append(check, text);
-
-    const del = document.createElement("button");
-    del.textContent = "Delete";
-    del.className = "delete-btn";
-    del.addEventListener("click", () => {
-      state.tasks[listType] = state.tasks[listType].filter((item) => item.id !== task.id);
-      saveState();
-      renderList(listType);
-    });
-
-    li.append(label, del);
-    listEl.appendChild(li);
-  });
-
-  emptyEl.style.display = filtered.length === 0 ? "block" : "none";
-}
-
-function syncStatusTabs(listType) {
-  const activeFilter = state.filters[listType];
-  document
-    .querySelectorAll(`.status-tab[data-list="${listType}"]`)
-    .forEach((tab) => tab.classList.toggle("active", tab.dataset.filter === activeFilter));
-}
-
-function hydrateSettingsUI() {
-  els.dailyResetTime.value = state.settings.dailyResetTime;
-  els.weeklyResetDay.value = String(state.settings.weeklyResetDay);
-  els.weeklyResetTime.value = state.settings.weeklyResetTime;
-}
-
-function runResetsIfNeeded() {
-  const now = new Date();
-  const nextDailyPeriodId = dailyPeriodId(now, state.settings.dailyResetTime);
-  const nextWeeklyPeriodId = weeklyPeriodId(
-    now,
-    state.settings.weeklyResetDay,
-    state.settings.weeklyResetTime
-  );
-
-  if (state.periodIds.daily !== nextDailyPeriodId) {
-    state.periodIds.daily = nextDailyPeriodId;
-    state.tasks.daily = state.tasks.daily.map((task) => ({ ...task, done: false }));
-    state.filters.daily = "unfinished";
-  }
-
-  if (state.periodIds.weekly !== nextWeeklyPeriodId) {
-    state.periodIds.weekly = nextWeeklyPeriodId;
-    state.tasks.weekly = state.tasks.weekly.map((task) => ({ ...task, done: false }));
-    state.filters.weekly = "unfinished";
-  }
-
-  saveState();
-}
-
-function dailyPeriodId(now, timeStr) {
-  const [hour, minute] = parseTime(timeStr);
-  const pivot = new Date(now);
-  pivot.setHours(hour, minute, 0, 0);
-
-  if (now < pivot) {
-    pivot.setDate(pivot.getDate() - 1);
-  }
-
-  return dateOnlyId(pivot);
-}
-
-function weeklyPeriodId(now, resetDay, timeStr) {
-  const [hour, minute] = parseTime(timeStr);
-  const pivot = new Date(now);
-  pivot.setHours(hour, minute, 0, 0);
-
-  const diffDays = (now.getDay() - resetDay + 7) % 7;
-  pivot.setDate(now.getDate() - diffDays);
-
-  const sameDayBeforeReset = diffDays === 0 && now < pivot;
-  if (sameDayBeforeReset) {
-    pivot.setDate(pivot.getDate() - 7);
-  }
-
-  return dateOnlyId(pivot);
-}
-
-function renderResetLabels() {
-  const weekday = [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-  ][state.settings.weeklyResetDay];
-
-  els.dailyResetLabel.textContent = `Resets daily at ${state.settings.dailyResetTime}`;
-  els.weeklyResetLabel.textContent = `Resets ${weekday} at ${state.settings.weeklyResetTime}`;
-}
-
-function parseTime(value) {
-  const [h = "0", m = "0"] = value.split(":");
-  return [Number(h), Number(m)];
-}
-
-function dateOnlyId(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate()
-  ).padStart(2, "0")}`;
-}
-
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return structuredClone(defaultState);
-
-    const parsed = JSON.parse(raw);
-    return {
-      ...structuredClone(defaultState),
-      ...parsed,
-      settings: { ...defaultState.settings, ...parsed.settings },
-      periodIds: { ...defaultState.periodIds, ...parsed.periodIds },
-      filters: { ...defaultState.filters, ...parsed.filters },
-      tasks: {
-        daily: Array.isArray(parsed?.tasks?.daily) ? parsed.tasks.daily : [],
-        weekly: Array.isArray(parsed?.tasks?.weekly) ? parsed.tasks.weekly : [],
-        todo: Array.isArray(parsed?.tasks?.todo) ? parsed.tasks.todo : [],
-      },
-    };
-  } catch {
-    return structuredClone(defaultState);
-  }
-}
-
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
+    <script src="app.js"></script>
+  </body>
+</html>
