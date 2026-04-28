@@ -1,4 +1,5 @@
-const STORAGE_KEY = "schedms-data-v1";
+const STORAGE_KEY = "schedms-data-v2";
+const LEGACY_STORAGE_KEY = "schedms-data-v1";
 const LIST_TYPES = ["daily", "weekly", "todo"];
 const PERSON_IDS = ["p1", "p2"];
 
@@ -43,9 +44,6 @@ const TIMEZONE_OPTIONS = [
   ["+14:00", "UTC+14 (LINT)"],
 ];
 
-const blankPersonTasks = () => ({ p1: [], p2: [] });
-const blankPersonFilters = () => ({ p1: "unfinished", p2: "unfinished" });
-
 const defaultState = {
   settings: {
     resetTime: "00:00",
@@ -54,16 +52,9 @@ const defaultState = {
     people: { p1: "Player 1", p2: "Player 2" },
   },
   periodIds: { daily: "", weekly: "" },
-  filters: {
-    daily: blankPersonFilters(),
-    weekly: blankPersonFilters(),
-    todo: blankPersonFilters(),
-  },
-  tasks: {
-    daily: blankPersonTasks(),
-    weekly: blankPersonTasks(),
-    todo: blankPersonTasks(),
-  },
+  filters: { daily: "unfinished", weekly: "unfinished", todo: "unfinished" },
+  activeOwner: { daily: "p1", weekly: "p1", todo: "p1" },
+  tasks: { daily: [], weekly: [], todo: [] },
   undoDelete: null,
 };
 
@@ -76,28 +67,12 @@ const els = {
   },
   topTabs: document.querySelectorAll(".top-tab"),
   statusTabs: document.querySelectorAll(".status-tab"),
+  ownerButtons: document.querySelectorAll(".owner-btn"),
   addForms: document.querySelectorAll(".add-task-form"),
   lists: {
-    daily: {
-      p1: { list: document.getElementById("daily-p1-list"), empty: document.getElementById("daily-p1-empty"), error: document.getElementById("daily-p1-error") },
-      p2: { list: document.getElementById("daily-p2-list"), empty: document.getElementById("daily-p2-empty"), error: document.getElementById("daily-p2-error") },
-    },
-    weekly: {
-      p1: { list: document.getElementById("weekly-p1-list"), empty: document.getElementById("weekly-p1-empty"), error: document.getElementById("weekly-p1-error") },
-      p2: { list: document.getElementById("weekly-p2-list"), empty: document.getElementById("weekly-p2-empty"), error: document.getElementById("weekly-p2-error") },
-    },
-    todo: {
-      p1: { list: document.getElementById("todo-p1-list"), empty: document.getElementById("todo-p1-empty"), error: document.getElementById("todo-p1-error") },
-      p2: { list: document.getElementById("todo-p2-list"), empty: document.getElementById("todo-p2-empty"), error: document.getElementById("todo-p2-error") },
-    },
-  },
-  titleEls: {
-    "todo-p1": document.getElementById("todo-p1-title"),
-    "todo-p2": document.getElementById("todo-p2-title"),
-    "daily-p1": document.getElementById("daily-p1-title"),
-    "daily-p2": document.getElementById("daily-p2-title"),
-    "weekly-p1": document.getElementById("weekly-p1-title"),
-    "weekly-p2": document.getElementById("weekly-p2-title"),
+    daily: { list: document.getElementById("daily-list"), empty: document.getElementById("daily-empty"), error: document.getElementById("daily-error") },
+    weekly: { list: document.getElementById("weekly-list"), empty: document.getElementById("weekly-empty"), error: document.getElementById("weekly-error") },
+    todo: { list: document.getElementById("todo-list"), empty: document.getElementById("todo-empty"), error: document.getElementById("todo-error") },
   },
   dailyResetLabel: document.getElementById("daily-reset-label"),
   weeklyResetLabel: document.getElementById("weekly-reset-label"),
@@ -134,8 +109,16 @@ function wireEvents() {
 
   els.statusTabs.forEach((tab) => {
     tab.addEventListener("click", () => {
-      const { list, person, filter } = tab.dataset;
-      state.filters[list][person] = filter;
+      const { list, filter } = tab.dataset;
+      state.filters[list] = filter;
+      saveState();
+      renderAll();
+    });
+  });
+
+  els.ownerButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.activeOwner[btn.dataset.list] = btn.dataset.owner;
       saveState();
       renderAll();
     });
@@ -144,16 +127,21 @@ function wireEvents() {
   els.addForms.forEach((form) => {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      const { list, person } = form.dataset;
+      const { list } = form.dataset;
       const input = form.querySelector("input");
       const text = input.value.trim();
       if (text.length < 3) {
-        setFormError(list, person, "Task must be at least 3 characters.");
+        setFormError(list, "Task must be at least 3 characters.");
         return;
       }
 
-      setFormError(list, person, "");
-      state.tasks[list][person].push({ id: crypto.randomUUID(), text, done: false });
+      setFormError(list, "");
+      state.tasks[list].push({
+        id: crypto.randomUUID(),
+        text,
+        done: false,
+        owner: state.activeOwner[list],
+      });
       input.value = "";
       saveState();
       renderAll();
@@ -186,8 +174,8 @@ function wireEvents() {
 
   els.undoDelete.addEventListener("click", () => {
     if (!state.undoDelete) return;
-    const { listType, personId, task } = state.undoDelete;
-    state.tasks[listType][personId].push(task);
+    const { listType, task } = state.undoDelete;
+    state.tasks[listType].push(task);
     state.undoDelete = null;
     saveState();
     renderAll();
@@ -201,8 +189,8 @@ function updatePersonName(personId, value) {
   renderAll();
 }
 
-function setFormError(listType, personId, message) {
-  els.lists[listType][personId].error.textContent = message;
+function setFormError(listType, message) {
+  els.lists[listType].error.textContent = message;
 }
 
 function switchView(viewName) {
@@ -212,37 +200,31 @@ function switchView(viewName) {
 
 function renderAll() {
   LIST_TYPES.forEach((listType) => {
-    PERSON_IDS.forEach((personId) => {
-      renderList(listType, personId);
-      syncStatusTabs(listType, personId);
-      renderPersonTitle(listType, personId);
-    });
+    renderList(listType);
+    syncStatusTabs(listType);
+    syncOwnerButtons(listType);
   });
   renderResetLabels();
   renderUndoButton();
   hydrateNameInputs();
 }
 
-function renderPersonTitle(listType, personId) {
-  els.titleEls[`${listType}-${personId}`].textContent = state.settings.people[personId];
-}
-
-function renderList(listType, personId) {
-  const taskSet = state.tasks[listType][personId];
-  const filter = state.filters[listType][personId];
-  const listEl = els.lists[listType][personId].list;
-  const emptyEl = els.lists[listType][personId].empty;
+function renderList(listType) {
+  const taskSet = state.tasks[listType];
+  const filter = state.filters[listType];
+  const listEl = els.lists[listType].list;
+  const emptyEl = els.lists[listType].empty;
 
   const unfinishedCount = taskSet.filter((task) => !task.done).length;
   const finishedCount = taskSet.length - unfinishedCount;
-  updateTabCount(listType, personId, unfinishedCount, finishedCount);
+  updateTabCount(listType, unfinishedCount, finishedCount);
 
   const filtered = taskSet.filter((task) => (filter === "unfinished" ? !task.done : task.done));
   listEl.innerHTML = "";
 
   filtered.forEach((task) => {
     const li = document.createElement("li");
-    li.className = `task-item ${task.done ? "done" : ""}`;
+    li.className = `task-item ${task.done ? "done" : ""} ${task.owner === "p1" ? "owner-p1" : "owner-p2"}`;
 
     const label = document.createElement("label");
     const check = document.createElement("input");
@@ -254,16 +236,25 @@ function renderList(listType, personId) {
       renderAll();
     });
 
+    const textWrap = document.createElement("span");
+    textWrap.className = "task-text-wrap";
+
+    const badge = document.createElement("small");
+    badge.className = "owner-badge";
+    badge.textContent = state.settings.people[task.owner] || (task.owner === "p1" ? "Player 1" : "Player 2");
+
     const text = document.createElement("span");
     text.textContent = task.text;
-    label.append(check, text);
+
+    textWrap.append(badge, text);
+    label.append(check, textWrap);
 
     const del = document.createElement("button");
     del.textContent = "remove";
     del.className = "delete-btn";
     del.addEventListener("click", () => {
-      state.tasks[listType][personId] = state.tasks[listType][personId].filter((item) => item.id !== task.id);
-      state.undoDelete = { listType, personId, task };
+      state.tasks[listType] = state.tasks[listType].filter((item) => item.id !== task.id);
+      state.undoDelete = { listType, task };
       saveState();
       renderAll();
     });
@@ -275,15 +266,24 @@ function renderList(listType, personId) {
   emptyEl.style.display = filtered.length === 0 ? "block" : "none";
 }
 
-function updateTabCount(listType, personId, unfinishedCount, finishedCount) {
-  document.querySelector(`.status-tab[data-list="${listType}"][data-person="${personId}"][data-filter="unfinished"]`).textContent = `Unfinished (${unfinishedCount})`;
-  document.querySelector(`.status-tab[data-list="${listType}"][data-person="${personId}"][data-filter="finished"]`).textContent = `Finished (${finishedCount})`;
+function updateTabCount(listType, unfinishedCount, finishedCount) {
+  document.querySelector(`.status-tab[data-list="${listType}"][data-filter="unfinished"]`).textContent = `Unfinished (${unfinishedCount})`;
+  document.querySelector(`.status-tab[data-list="${listType}"][data-filter="finished"]`).textContent = `Finished (${finishedCount})`;
 }
 
-function syncStatusTabs(listType, personId) {
-  const activeFilter = state.filters[listType][personId];
-  document.querySelectorAll(`.status-tab[data-list="${listType}"][data-person="${personId}"]`).forEach((tab) => {
+function syncStatusTabs(listType) {
+  const activeFilter = state.filters[listType];
+  document.querySelectorAll(`.status-tab[data-list="${listType}"]`).forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.filter === activeFilter);
+  });
+}
+
+function syncOwnerButtons(listType) {
+  const activeOwner = state.activeOwner[listType];
+  document.querySelectorAll(`.owner-btn[data-list="${listType}"]`).forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.owner === activeOwner);
+    const label = state.settings.people[btn.dataset.owner] || (btn.dataset.owner === "p1" ? "Player 1" : "Player 2");
+    btn.textContent = label;
   });
 }
 
@@ -315,18 +315,14 @@ function runResetsIfNeeded() {
 
   if (state.periodIds.daily !== nextDailyPeriodId) {
     state.periodIds.daily = nextDailyPeriodId;
-    PERSON_IDS.forEach((personId) => {
-      state.tasks.daily[personId] = state.tasks.daily[personId].map((task) => ({ ...task, done: false }));
-      state.filters.daily[personId] = "unfinished";
-    });
+    state.tasks.daily = state.tasks.daily.map((task) => ({ ...task, done: false }));
+    state.filters.daily = "unfinished";
   }
 
   if (state.periodIds.weekly !== nextWeeklyPeriodId) {
     state.periodIds.weekly = nextWeeklyPeriodId;
-    PERSON_IDS.forEach((personId) => {
-      state.tasks.weekly[personId] = state.tasks.weekly[personId].map((task) => ({ ...task, done: false }));
-      state.filters.weekly[personId] = "unfinished";
-    });
+    state.tasks.weekly = state.tasks.weekly.map((task) => ({ ...task, done: false }));
+    state.filters.weekly = "unfinished";
   }
 
   saveState();
@@ -369,37 +365,19 @@ function weeklyPeriodId(now, resetDay, timeStr, offset) {
   return formatDateParts(pivot);
 }
 
-function nextDailyReset(now, timeStr, offset) {
-  const tzNow = toTimezoneDate(now, offset);
-  const [hour, minute] = parseTime(timeStr);
-  const next = new Date(tzNow);
-  next.setUTCHours(hour, minute, 0, 0);
-  if (next <= tzNow) next.setUTCDate(next.getUTCDate() + 1);
-  return next;
-}
-
-function nextWeeklyReset(now, resetDay, timeStr, offset) {
-  const tzNow = toTimezoneDate(now, offset);
-  const [hour, minute] = parseTime(timeStr);
-  const next = new Date(tzNow);
-  next.setUTCHours(hour, minute, 0, 0);
-  let daysUntil = (resetDay - tzNow.getUTCDay() + 7) % 7;
-  if (daysUntil === 0 && next <= tzNow) daysUntil = 7;
-  next.setUTCDate(tzNow.getUTCDate() + daysUntil);
-  return next;
+function formatResetTime12h(timeStr) {
+  const [h, m] = parseTime(timeStr);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 function renderResetLabels() {
-  const now = new Date();
-  const offset = state.settings.timezoneOffset;
-  const tzLabel = `UTC${offset}`;
-  const dayName = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][state.settings.weeklyResetDay];
+  const resetTime = formatResetTime12h(state.settings.resetTime);
+  const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][state.settings.weeklyResetDay];
 
-  const d = nextDailyReset(now, state.settings.resetTime, offset);
-  const w = nextWeeklyReset(now, state.settings.weeklyResetDay, state.settings.resetTime, offset);
-
-  els.dailyResetLabel.textContent = `Next: ${formatDateParts(d)} ${state.settings.resetTime} (${tzLabel})`;
-  els.weeklyResetLabel.textContent = `Next: ${dayName} ${formatDateParts(w)} ${state.settings.resetTime} (${tzLabel})`;
+  els.dailyResetLabel.textContent = `Reset: ${resetTime}`;
+  els.weeklyResetLabel.textContent = `Reset: ${resetTime} ${dayName}`;
 }
 
 function parseTime(value) {
@@ -407,31 +385,52 @@ function parseTime(value) {
   return [Number(h), Number(m)];
 }
 
-function ensurePersonTaskSet(taskSet) {
-  if (!taskSet || typeof taskSet !== "object") return blankPersonTasks();
+function normalizeTask(task, fallbackOwner = "p1") {
+  if (!task || typeof task !== "object") return null;
   return {
-    p1: Array.isArray(taskSet.p1) ? taskSet.p1 : [],
-    p2: Array.isArray(taskSet.p2) ? taskSet.p2 : [],
+    id: String(task.id || crypto.randomUUID()),
+    text: String(task.text || "").trim(),
+    done: Boolean(task.done),
+    owner: task.owner === "p2" ? "p2" : fallbackOwner,
   };
 }
 
-function ensurePersonFilters(filters) {
-  if (!filters || typeof filters !== "object") return blankPersonFilters();
-  return {
-    p1: filters.p1 === "finished" ? "finished" : "unfinished",
-    p2: filters.p2 === "finished" ? "finished" : "unfinished",
-  };
+function mergeLegacyTaskSets(taskSet) {
+  if (Array.isArray(taskSet)) {
+    return taskSet
+      .map((task) => normalizeTask(task, task?.owner === "p2" ? "p2" : "p1"))
+      .filter((task) => task && task.text.length > 0);
+  }
+
+  if (taskSet && typeof taskSet === "object") {
+    const p1 = Array.isArray(taskSet.p1) ? taskSet.p1 : [];
+    const p2 = Array.isArray(taskSet.p2) ? taskSet.p2 : [];
+    return [
+      ...p1.map((task) => normalizeTask(task, "p1")),
+      ...p2.map((task) => normalizeTask(task, "p2")),
+    ].filter((task) => task && task.text.length > 0);
+  }
+
+  return [];
+}
+
+function normalizeFilter(filter) {
+  return filter === "finished" ? "finished" : "unfinished";
+}
+
+function normalizeActiveOwner(owner) {
+  return owner === "p2" ? "p2" : "p1";
 }
 
 function loadState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return structuredClone(defaultState);
     const parsed = JSON.parse(raw);
 
     const resetTime = parsed?.settings?.resetTime || parsed?.settings?.dailyResetTime || "00:00";
 
-    return {
+    const merged = {
       ...structuredClone(defaultState),
       ...parsed,
       settings: {
@@ -446,17 +445,24 @@ function loadState() {
       },
       periodIds: { ...defaultState.periodIds, ...parsed.periodIds },
       filters: {
-        daily: ensurePersonFilters(parsed?.filters?.daily),
-        weekly: ensurePersonFilters(parsed?.filters?.weekly),
-        todo: ensurePersonFilters(parsed?.filters?.todo),
+        daily: normalizeFilter(parsed?.filters?.daily?.p1 || parsed?.filters?.daily),
+        weekly: normalizeFilter(parsed?.filters?.weekly?.p1 || parsed?.filters?.weekly),
+        todo: normalizeFilter(parsed?.filters?.todo?.p1 || parsed?.filters?.todo),
+      },
+      activeOwner: {
+        daily: normalizeActiveOwner(parsed?.activeOwner?.daily),
+        weekly: normalizeActiveOwner(parsed?.activeOwner?.weekly),
+        todo: normalizeActiveOwner(parsed?.activeOwner?.todo),
       },
       tasks: {
-        daily: ensurePersonTaskSet(parsed?.tasks?.daily),
-        weekly: ensurePersonTaskSet(parsed?.tasks?.weekly),
-        todo: ensurePersonTaskSet(parsed?.tasks?.todo),
+        daily: mergeLegacyTaskSets(parsed?.tasks?.daily),
+        weekly: mergeLegacyTaskSets(parsed?.tasks?.weekly),
+        todo: mergeLegacyTaskSets(parsed?.tasks?.todo),
       },
       undoDelete: null,
     };
+
+    return merged;
   } catch {
     return structuredClone(defaultState);
   }
