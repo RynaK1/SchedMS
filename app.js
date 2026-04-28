@@ -1,25 +1,38 @@
 const STORAGE_KEY = "schedms-data-v1";
 const LIST_TYPES = ["daily", "weekly", "todo"];
+const PERSON_IDS = ["p1", "p2"];
+
+const blankPersonTasks = () => ({ p1: [], p2: [] });
+const blankPersonFilters = () => ({ p1: "unfinished", p2: "unfinished" });
 
 const defaultState = {
   settings: {
     dailyResetTime: "00:00",
     weeklyResetDay: 3,
     weeklyResetTime: "00:00",
+    people: {
+      p1: "Player 1",
+      p2: "Player 2",
+    },
   },
   periodIds: {
     daily: "",
     weekly: "",
   },
+  activePerson: {
+    daily: "p1",
+    weekly: "p1",
+    todo: "p1",
+  },
   filters: {
-    daily: "unfinished",
-    weekly: "unfinished",
-    todo: "unfinished",
+    daily: blankPersonFilters(),
+    weekly: blankPersonFilters(),
+    todo: blankPersonFilters(),
   },
   tasks: {
-    daily: [],
-    weekly: [],
-    todo: [],
+    daily: blankPersonTasks(),
+    weekly: blankPersonTasks(),
+    todo: blankPersonTasks(),
   },
   undoDelete: null,
 };
@@ -32,30 +45,21 @@ const els = {
     options: document.getElementById("options-view"),
   },
   topTabs: document.querySelectorAll(".top-tab"),
+  personTabs: document.querySelectorAll(".person-tab"),
   statusTabs: document.querySelectorAll(".status-tab"),
   addForms: document.querySelectorAll(".add-task-form"),
   lists: {
-    daily: {
-      list: document.getElementById("daily-task-list"),
-      empty: document.getElementById("daily-empty"),
-      error: document.getElementById("daily-error"),
-    },
-    weekly: {
-      list: document.getElementById("weekly-task-list"),
-      empty: document.getElementById("weekly-empty"),
-      error: document.getElementById("weekly-error"),
-    },
-    todo: {
-      list: document.getElementById("todo-task-list"),
-      empty: document.getElementById("todo-empty"),
-      error: document.getElementById("todo-error"),
-    },
+    daily: { list: document.getElementById("daily-task-list"), empty: document.getElementById("daily-empty"), error: document.getElementById("daily-error") },
+    weekly: { list: document.getElementById("weekly-task-list"), empty: document.getElementById("weekly-empty"), error: document.getElementById("weekly-error") },
+    todo: { list: document.getElementById("todo-task-list"), empty: document.getElementById("todo-empty"), error: document.getElementById("todo-error") },
   },
   dailyResetLabel: document.getElementById("daily-reset-label"),
   weeklyResetLabel: document.getElementById("weekly-reset-label"),
   dailyResetTime: document.getElementById("daily-reset-time"),
   weeklyResetDay: document.getElementById("weekly-reset-day"),
   weeklyResetTime: document.getElementById("weekly-reset-time"),
+  person1Name: document.getElementById("person1-name"),
+  person2Name: document.getElementById("person2-name"),
   saveStatus: document.getElementById("save-status"),
   undoDelete: document.getElementById("undo-delete"),
 };
@@ -70,14 +74,21 @@ function initialize() {
 }
 
 function wireEvents() {
-  els.topTabs.forEach((tab) => {
-    tab.addEventListener("click", () => switchView(tab.dataset.view));
+  els.topTabs.forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
+
+  els.personTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      state.activePerson[tab.dataset.list] = tab.dataset.person;
+      saveState();
+      renderAll();
+    });
   });
 
   els.statusTabs.forEach((tab) => {
     tab.addEventListener("click", () => {
       const listType = tab.dataset.list;
-      state.filters[listType] = tab.dataset.filter;
+      const personId = state.activePerson[listType];
+      state.filters[listType][personId] = tab.dataset.filter;
       saveState();
       renderAll();
     });
@@ -87,6 +98,7 @@ function wireEvents() {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const listType = form.dataset.list;
+      const personId = state.activePerson[listType];
       const input = form.querySelector("input");
       const text = input.value.trim();
 
@@ -96,12 +108,7 @@ function wireEvents() {
       }
 
       setFormError(listType, "");
-      state.tasks[listType].push({
-        id: crypto.randomUUID(),
-        text,
-        done: false,
-      });
-
+      state.tasks[listType][personId].push({ id: crypto.randomUUID(), text, done: false });
       input.value = "";
       saveState();
       renderAll();
@@ -129,14 +136,24 @@ function wireEvents() {
     renderAll();
   });
 
+  els.person1Name.addEventListener("input", () => updatePersonName("p1", els.person1Name.value));
+  els.person2Name.addEventListener("input", () => updatePersonName("p2", els.person2Name.value));
+
   els.undoDelete.addEventListener("click", () => {
     if (!state.undoDelete) return;
-    const { listType, task } = state.undoDelete;
-    state.tasks[listType].push(task);
+    const { listType, personId, task } = state.undoDelete;
+    state.tasks[listType][personId].push(task);
     state.undoDelete = null;
     saveState();
     renderAll();
   });
+}
+
+function updatePersonName(personId, value) {
+  const clean = value.trim();
+  state.settings.people[personId] = clean || (personId === "p1" ? "Player 1" : "Player 2");
+  saveState();
+  renderAll();
 }
 
 function setFormError(listType, message) {
@@ -144,37 +161,42 @@ function setFormError(listType, message) {
 }
 
 function switchView(viewName) {
-  Object.entries(els.views).forEach(([name, section]) => {
-    section.classList.toggle("active", name === viewName);
-  });
-
-  els.topTabs.forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.view === viewName);
-  });
+  Object.entries(els.views).forEach(([name, section]) => section.classList.toggle("active", name === viewName));
+  els.topTabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === viewName));
 }
 
 function renderAll() {
   LIST_TYPES.forEach((listType) => {
+    renderPersonTabs(listType);
     renderList(listType);
     syncStatusTabs(listType);
   });
   renderResetLabels();
   renderUndoButton();
+  hydrateNameInputs();
+}
+
+function renderPersonTabs(listType) {
+  const selectedPerson = state.activePerson[listType];
+  document.querySelectorAll(`.person-tab[data-list="${listType}"]`).forEach((tab) => {
+    const personId = tab.dataset.person;
+    tab.classList.toggle("active", personId === selectedPerson);
+    tab.textContent = state.settings.people[personId];
+  });
 }
 
 function renderList(listType) {
+  const personId = state.activePerson[listType];
+  const personTasks = state.tasks[listType][personId];
+  const filter = state.filters[listType][personId];
   const listEl = els.lists[listType].list;
   const emptyEl = els.lists[listType].empty;
-  const filter = state.filters[listType];
 
-  const unfinishedCount = state.tasks[listType].filter((task) => !task.done).length;
-  const finishedCount = state.tasks[listType].length - unfinishedCount;
+  const unfinishedCount = personTasks.filter((task) => !task.done).length;
+  const finishedCount = personTasks.length - unfinishedCount;
   updateTabCount(listType, unfinishedCount, finishedCount);
 
-  const filtered = state.tasks[listType].filter((task) =>
-    filter === "unfinished" ? !task.done : task.done
-  );
-
+  const filtered = personTasks.filter((task) => (filter === "unfinished" ? !task.done : task.done));
   listEl.innerHTML = "";
 
   filtered.forEach((task) => {
@@ -196,11 +218,11 @@ function renderList(listType) {
     label.append(check, text);
 
     const del = document.createElement("button");
-    del.textContent = "Delete";
+    del.textContent = "remove";
     del.className = "delete-btn";
     del.addEventListener("click", () => {
-      state.tasks[listType] = state.tasks[listType].filter((item) => item.id !== task.id);
-      state.undoDelete = { listType, task };
+      state.tasks[listType][personId] = state.tasks[listType][personId].filter((item) => item.id !== task.id);
+      state.undoDelete = { listType, personId, task };
       saveState();
       renderAll();
     });
@@ -213,52 +235,53 @@ function renderList(listType) {
 }
 
 function updateTabCount(listType, unfinishedCount, finishedCount) {
-  document
-    .querySelector(`.status-tab[data-list="${listType}"][data-filter="unfinished"]`)
-    .replaceChildren(document.createTextNode(`Unfinished (${unfinishedCount})`));
-
-  document
-    .querySelector(`.status-tab[data-list="${listType}"][data-filter="finished"]`)
-    .replaceChildren(document.createTextNode(`Finished (${finishedCount})`));
+  document.querySelector(`.status-tab[data-list="${listType}"][data-filter="unfinished"]`).textContent = `Unfinished (${unfinishedCount})`;
+  document.querySelector(`.status-tab[data-list="${listType}"][data-filter="finished"]`).textContent = `Finished (${finishedCount})`;
 }
 
 function syncStatusTabs(listType) {
-  const activeFilter = state.filters[listType];
-  document
-    .querySelectorAll(`.status-tab[data-list="${listType}"]`)
-    .forEach((tab) => tab.classList.toggle("active", tab.dataset.filter === activeFilter));
+  const personId = state.activePerson[listType];
+  const activeFilter = state.filters[listType][personId];
+  document.querySelectorAll(`.status-tab[data-list="${listType}"]`).forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.filter === activeFilter);
+  });
 }
 
 function renderUndoButton() {
-  const canUndo = Boolean(state.undoDelete);
-  els.undoDelete.disabled = !canUndo;
+  els.undoDelete.disabled = !Boolean(state.undoDelete);
 }
 
 function hydrateSettingsUI() {
   els.dailyResetTime.value = state.settings.dailyResetTime;
   els.weeklyResetDay.value = String(state.settings.weeklyResetDay);
   els.weeklyResetTime.value = state.settings.weeklyResetTime;
+  hydrateNameInputs();
+}
+
+function hydrateNameInputs() {
+  els.person1Name.value = state.settings.people.p1;
+  els.person2Name.value = state.settings.people.p2;
 }
 
 function runResetsIfNeeded() {
   const now = new Date();
   const nextDailyPeriodId = dailyPeriodId(now, state.settings.dailyResetTime);
-  const nextWeeklyPeriodId = weeklyPeriodId(
-    now,
-    state.settings.weeklyResetDay,
-    state.settings.weeklyResetTime
-  );
+  const nextWeeklyPeriodId = weeklyPeriodId(now, state.settings.weeklyResetDay, state.settings.weeklyResetTime);
 
   if (state.periodIds.daily !== nextDailyPeriodId) {
     state.periodIds.daily = nextDailyPeriodId;
-    state.tasks.daily = state.tasks.daily.map((task) => ({ ...task, done: false }));
-    state.filters.daily = "unfinished";
+    PERSON_IDS.forEach((personId) => {
+      state.tasks.daily[personId] = state.tasks.daily[personId].map((task) => ({ ...task, done: false }));
+      state.filters.daily[personId] = "unfinished";
+    });
   }
 
   if (state.periodIds.weekly !== nextWeeklyPeriodId) {
     state.periodIds.weekly = nextWeeklyPeriodId;
-    state.tasks.weekly = state.tasks.weekly.map((task) => ({ ...task, done: false }));
-    state.filters.weekly = "unfinished";
+    PERSON_IDS.forEach((personId) => {
+      state.tasks.weekly[personId] = state.tasks.weekly[personId].map((task) => ({ ...task, done: false }));
+      state.filters.weekly[personId] = "unfinished";
+    });
   }
 
   saveState();
@@ -268,11 +291,7 @@ function dailyPeriodId(now, timeStr) {
   const [hour, minute] = parseTime(timeStr);
   const pivot = new Date(now);
   pivot.setHours(hour, minute, 0, 0);
-
-  if (now < pivot) {
-    pivot.setDate(pivot.getDate() - 1);
-  }
-
+  if (now < pivot) pivot.setDate(pivot.getDate() - 1);
   return dateOnlyId(pivot);
 }
 
@@ -280,26 +299,14 @@ function weeklyPeriodId(now, resetDay, timeStr) {
   const [hour, minute] = parseTime(timeStr);
   const pivot = new Date(now);
   pivot.setHours(hour, minute, 0, 0);
-
   const diffDays = (now.getDay() - resetDay + 7) % 7;
   pivot.setDate(now.getDate() - diffDays);
-
-  const sameDayBeforeReset = diffDays === 0 && now < pivot;
-  if (sameDayBeforeReset) {
-    pivot.setDate(pivot.getDate() - 7);
-  }
-
+  if (diffDays === 0 && now < pivot) pivot.setDate(pivot.getDate() - 7);
   return dateOnlyId(pivot);
 }
 
 function formatDateTime(date) {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-    day: "numeric",
-  }).format(date);
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" }).format(date);
 }
 
 function nextDailyReset(now, timeStr) {
@@ -322,11 +329,8 @@ function nextWeeklyReset(now, resetDay, timeStr) {
 
 function renderResetLabels() {
   const now = new Date();
-  const dailyNext = nextDailyReset(now, state.settings.dailyResetTime);
-  const weeklyNext = nextWeeklyReset(now, state.settings.weeklyResetDay, state.settings.weeklyResetTime);
-
-  els.dailyResetLabel.textContent = `Next reset: ${formatDateTime(dailyNext)}`;
-  els.weeklyResetLabel.textContent = `Next reset: ${formatDateTime(weeklyNext)}`;
+  els.dailyResetLabel.textContent = `Next reset: ${formatDateTime(nextDailyReset(now, state.settings.dailyResetTime))}`;
+  els.weeklyResetLabel.textContent = `Next reset: ${formatDateTime(nextWeeklyReset(now, state.settings.weeklyResetDay, state.settings.weeklyResetTime))}`;
 }
 
 function parseTime(value) {
@@ -335,9 +339,23 @@ function parseTime(value) {
 }
 
 function dateOnlyId(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate()
-  ).padStart(2, "0")}`;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function ensurePersonTaskSet(taskSet) {
+  if (!taskSet || typeof taskSet !== "object") return blankPersonTasks();
+  return {
+    p1: Array.isArray(taskSet.p1) ? taskSet.p1 : [],
+    p2: Array.isArray(taskSet.p2) ? taskSet.p2 : [],
+  };
+}
+
+function ensurePersonFilters(filters) {
+  if (!filters || typeof filters !== "object") return blankPersonFilters();
+  return {
+    p1: filters.p1 === "finished" ? "finished" : "unfinished",
+    p2: filters.p2 === "finished" ? "finished" : "unfinished",
+  };
 }
 
 function loadState() {
@@ -349,13 +367,28 @@ function loadState() {
     return {
       ...structuredClone(defaultState),
       ...parsed,
-      settings: { ...defaultState.settings, ...parsed.settings },
+      settings: {
+        ...defaultState.settings,
+        ...parsed.settings,
+        people: {
+          ...defaultState.settings.people,
+          ...(parsed?.settings?.people || {}),
+        },
+      },
       periodIds: { ...defaultState.periodIds, ...parsed.periodIds },
-      filters: { ...defaultState.filters, ...parsed.filters },
+      activePerson: {
+        ...defaultState.activePerson,
+        ...parsed.activePerson,
+      },
+      filters: {
+        daily: ensurePersonFilters(parsed?.filters?.daily),
+        weekly: ensurePersonFilters(parsed?.filters?.weekly),
+        todo: ensurePersonFilters(parsed?.filters?.todo),
+      },
       tasks: {
-        daily: Array.isArray(parsed?.tasks?.daily) ? parsed.tasks.daily : [],
-        weekly: Array.isArray(parsed?.tasks?.weekly) ? parsed.tasks.weekly : [],
-        todo: Array.isArray(parsed?.tasks?.todo) ? parsed.tasks.todo : [],
+        daily: ensurePersonTaskSet(parsed?.tasks?.daily),
+        weekly: ensurePersonTaskSet(parsed?.tasks?.weekly),
+        todo: ensurePersonTaskSet(parsed?.tasks?.todo),
       },
       undoDelete: null,
     };

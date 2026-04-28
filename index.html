@@ -11,7 +11,7 @@
       <header class="app-header">
         <div>
           <h1>SchedMS</h1>
-          <p>MapleStory planner with persistent goals + repeating dailies/weeklies</p>
+          <p>MapleStory planner with separate personal spaces for two players.</p>
         </div>
         <div class="status-pill" id="save-status">Auto-saved</div>
       </header>
@@ -28,7 +28,12 @@
               <h2>Main To-Do</h2>
               <span class="reset-label">Persistent list</span>
             </div>
-            <p class="subcopy">Use this for one-off goals, upgrades, and long-term account plans.</p>
+            <p class="subcopy">Each person has their own separate to-do list below.</p>
+
+            <div class="person-tabs" role="tablist" aria-label="To-Do person tabs">
+              <button class="person-tab active" data-list="todo" data-person="p1">Player 1</button>
+              <button class="person-tab" data-list="todo" data-person="p2">Player 2</button>
+            </div>
 
             <div class="status-tabs" role="tablist" aria-label="To-Do task status tabs">
               <button class="status-tab active" data-list="todo" data-filter="unfinished">Unfinished</button>
@@ -37,7 +42,7 @@
 
             <form class="add-task-form" data-list="todo">
               <label class="sr-only" for="todo-task-input">Add to-do task</label>
-              <input id="todo-task-input" type="text" maxlength="120" placeholder="e.g., Save mesos for Arcane Umbra weapon" required />
+              <input id="todo-task-input" type="text" maxlength="120" placeholder="Add to-do for selected person" required />
               <button type="submit">Add</button>
             </form>
             <p id="todo-error" class="form-msg" role="alert"></p>
@@ -52,6 +57,12 @@
                 <h2>Daily</h2>
                 <span id="daily-reset-label" class="reset-label"></span>
               </div>
+
+              <div class="person-tabs" role="tablist" aria-label="Daily person tabs">
+                <button class="person-tab active" data-list="daily" data-person="p1">Player 1</button>
+                <button class="person-tab" data-list="daily" data-person="p2">Player 2</button>
+              </div>
+
               <div class="status-tabs" role="tablist" aria-label="Daily task status tabs">
                 <button class="status-tab active" data-list="daily" data-filter="unfinished">Unfinished</button>
                 <button class="status-tab" data-list="daily" data-filter="finished">Finished</button>
@@ -59,7 +70,7 @@
 
               <form class="add-task-form" data-list="daily">
                 <label class="sr-only" for="daily-task-input">Add daily task</label>
-                <input id="daily-task-input" type="text" maxlength="120" placeholder="e.g., Monster Park runs" required />
+                <input id="daily-task-input" type="text" maxlength="120" placeholder="Add daily for selected person" required />
                 <button type="submit">Add</button>
               </form>
               <p id="daily-error" class="form-msg" role="alert"></p>
@@ -73,6 +84,12 @@
                 <h2>Weekly</h2>
                 <span id="weekly-reset-label" class="reset-label"></span>
               </div>
+
+              <div class="person-tabs" role="tablist" aria-label="Weekly person tabs">
+                <button class="person-tab active" data-list="weekly" data-person="p1">Player 1</button>
+                <button class="person-tab" data-list="weekly" data-person="p2">Player 2</button>
+              </div>
+
               <div class="status-tabs" role="tablist" aria-label="Weekly task status tabs">
                 <button class="status-tab active" data-list="weekly" data-filter="unfinished">Unfinished</button>
                 <button class="status-tab" data-list="weekly" data-filter="finished">Finished</button>
@@ -80,7 +97,7 @@
 
               <form class="add-task-form" data-list="weekly">
                 <label class="sr-only" for="weekly-task-input">Add weekly task</label>
-                <input id="weekly-task-input" type="text" maxlength="120" placeholder="e.g., Weekly bossing set" required />
+                <input id="weekly-task-input" type="text" maxlength="120" placeholder="Add weekly for selected person" required />
                 <button type="submit">Add</button>
               </form>
               <p id="weekly-error" class="form-msg" role="alert"></p>
@@ -93,15 +110,25 @@
 
         <section class="tool-row">
           <button id="undo-delete" class="ghost-btn" disabled>Undo last delete</button>
-          <p class="hint">Tip: Daily/Weekly tasks reset to unfinished at your configured reset time.</p>
+          <p class="hint">Tip: Dailies/weeklies reset to unfinished at your configured reset time.</p>
         </section>
       </section>
 
       <section id="options-view" class="view">
         <section class="todo-card options-card">
-          <h2>Reset Options</h2>
-          <p>Pick when your repeating lists reset. Changes save automatically.</p>
+          <h2>Options</h2>
 
+          <h3>Player Names</h3>
+          <div class="option-row">
+            <label for="person1-name">Player 1 name</label>
+            <input id="person1-name" type="text" maxlength="30" />
+          </div>
+          <div class="option-row">
+            <label for="person2-name">Player 2 name</label>
+            <input id="person2-name" type="text" maxlength="30" />
+          </div>
+
+          <h3>Reset Settings</h3>
           <div class="option-row">
             <label for="daily-reset-time">Daily reset time</label>
             <input id="daily-reset-time" type="time" />
@@ -125,11 +152,10 @@
             <input id="weekly-reset-time" type="time" />
           </div>
 
-          <h3>How this works</h3>
           <ul class="help-list">
-            <li>Main To-Do never auto-resets.</li>
-            <li>Daily and Weekly tasks stay in the list and are marked unfinished on reset.</li>
-            <li>After each Daily/Weekly reset, that list automatically opens Unfinished tab.</li>
+            <li>Each list type has separate Player 1 and Player 2 task sets.</li>
+            <li>Share this page URL and each person can edit their own sub-list tab.</li>
+            <li>Daily/Weekly tasks remain but become unfinished on reset.</li>
           </ul>
         </section>
       </section>
