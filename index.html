@@ -19,23 +19,17 @@
       </nav>
 
       <section id="lists-view" class="view active">
-        <div class="list-stack">
-          <section class="todo-card todo-primary" data-list="todo">
-            <div class="card-header"><h2>Main To-Do</h2></div>
-            <div class="status-tabs" role="tablist" aria-label="Main To-Do status tabs">
-              <button class="status-tab active" data-list="todo" data-filter="unfinished">Unfinished</button>
-              <button class="status-tab" data-list="todo" data-filter="finished">Finished</button>
-            </div>
-            <form class="add-task-form" data-list="todo">
-              <label class="sr-only" for="todo-input">Add task</label>
-              <input id="todo-input" type="text" maxlength="120" placeholder="Add task" required />
-              <button type="submit">Add</button>
-            </form>
-            <p id="todo-error" class="form-msg" role="alert"></p>
-            <ul id="todo-list" class="task-list"></ul>
-            <p id="todo-empty" class="empty-msg">No tasks in this tab yet.</p>
-          </section>
+        <section class="tool-row">
+          <label for="bulk-delete-list" class="sr-only">Delete list contents</label>
+          <select id="bulk-delete-list">
+            <option value="todo">To-Do</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+          </select>
+          <button id="bulk-delete-btn" class="danger-btn">Delete List Contents</button>
+        </section>
 
+        <div class="list-stack">
           <section class="todo-card daily-card" data-list="daily">
             <div class="card-header">
               <h2>Daily</h2>
@@ -73,36 +67,40 @@
             <ul id="weekly-list" class="task-list"></ul>
             <p id="weekly-empty" class="empty-msg">No tasks in this tab yet.</p>
           </section>
-        </div>
 
-        <section class="tool-row">
-          <button id="undo-delete" class="ghost-btn" disabled>Undo last delete</button>
-        </section>
+          <section class="todo-card todo-primary" data-list="todo">
+            <div class="card-header"><h2>To-Do</h2></div>
+            <div class="status-tabs" role="tablist" aria-label="To-Do status tabs">
+              <button class="status-tab active" data-list="todo" data-filter="unfinished">Unfinished</button>
+              <button class="status-tab" data-list="todo" data-filter="finished">Finished</button>
+            </div>
+            <form class="add-task-form" data-list="todo">
+              <label class="sr-only" for="todo-input">Add task</label>
+              <input id="todo-input" type="text" maxlength="120" placeholder="Add task" required />
+              <button type="submit">Add</button>
+            </form>
+            <p id="todo-error" class="form-msg" role="alert"></p>
+            <ul id="todo-list" class="task-list"></ul>
+            <p id="todo-empty" class="empty-msg">No tasks in this tab yet.</p>
+          </section>
+        </div>
       </section>
 
       <section id="options-view" class="view">
         <section class="todo-card options-card">
           <h2>Options</h2>
-
           <h3>Reset Settings</h3>
           <div class="option-row">
             <label for="reset-time">Reset time</label>
             <input id="reset-time" type="time" />
           </div>
-
           <div class="option-row">
             <label for="weekly-reset-day">Weekly reset day</label>
             <select id="weekly-reset-day">
-              <option value="0">Sunday</option>
-              <option value="1">Monday</option>
-              <option value="2">Tuesday</option>
-              <option value="3">Wednesday</option>
-              <option value="4">Thursday</option>
-              <option value="5">Friday</option>
-              <option value="6">Saturday</option>
+              <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+              <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option>
             </select>
           </div>
-
           <div class="option-row">
             <label for="timezone-offset">Time zone</label>
             <select id="timezone-offset"></select>

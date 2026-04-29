@@ -5,14 +5,12 @@ const TIMEZONE_OPTIONS = [
   ["-12:00", "UTC-12 (AoE)"],
   ["-11:00", "UTC-11 (SST)"],
   ["-10:00", "UTC-10 (HST)"],
-  ["-09:30", "UTC-9:30 (Marquesas)"],
   ["-09:00", "UTC-9 (AKST)"],
   ["-08:00", "UTC-8 (PST)"],
   ["-07:00", "UTC-7 (MST)"],
   ["-06:00", "UTC-6 (CST)"],
   ["-05:00", "UTC-5 (EST)"],
   ["-04:00", "UTC-4 (AST)"],
-  ["-03:30", "UTC-3:30 (NST)"],
   ["-03:00", "UTC-3 (BRT)"],
   ["-02:00", "UTC-2 (South Georgia)"],
   ["-01:00", "UTC-1 (Azores)"],
@@ -20,24 +18,15 @@ const TIMEZONE_OPTIONS = [
   ["+01:00", "UTC+1 (CET)"],
   ["+02:00", "UTC+2 (EET)"],
   ["+03:00", "UTC+3 (MSK)"],
-  ["+03:30", "UTC+3:30 (IRST)"],
   ["+04:00", "UTC+4 (GST)"],
-  ["+04:30", "UTC+4:30 (AFT)"],
   ["+05:00", "UTC+5 (PKT)"],
-  ["+05:30", "UTC+5:30 (IST)"],
-  ["+05:45", "UTC+5:45 (NPT)"],
   ["+06:00", "UTC+6 (BST)"],
-  ["+06:30", "UTC+6:30 (MMT)"],
   ["+07:00", "UTC+7 (ICT)"],
   ["+08:00", "UTC+8 (AWST)"],
-  ["+08:45", "UTC+8:45 (ACWST)"],
   ["+09:00", "UTC+9 (JST)"],
-  ["+09:30", "UTC+9:30 (ACST)"],
   ["+10:00", "UTC+10 (AEST)"],
-  ["+10:30", "UTC+10:30 (LHST)"],
   ["+11:00", "UTC+11 (SBT)"],
   ["+12:00", "UTC+12 (NZST/FJT)"],
-  ["+12:45", "UTC+12:45 (CHAST)"],
   ["+13:00", "UTC+13 (NZDT/TOT)"],
   ["+14:00", "UTC+14 (LINT)"],
 ];
@@ -48,13 +37,27 @@ const defaultState = {
     weeklyResetDay: 3,
     timezoneOffset: "-08:00",
   },
-  periodIds: { daily: "", weekly: "" },
-  filters: { daily: "unfinished", weekly: "unfinished", todo: "unfinished" },
-  tasks: { daily: [], weekly: [], todo: [] },
-  undoDelete: null,
+  periodIds: {
+    daily: "",
+    weekly: "",
+  },
+  filters: {
+    daily: "unfinished",
+    weekly: "unfinished",
+    todo: "unfinished",
+  },
+  tasks: {
+    daily: [],
+    weekly: [],
+    todo: [],
+  },
 };
 
 let state = loadState();
+let dragState = {
+  listType: null,
+  taskId: null,
+};
 
 const els = {
   views: {
@@ -65,9 +68,21 @@ const els = {
   statusTabs: document.querySelectorAll(".status-tab"),
   addForms: document.querySelectorAll(".add-task-form"),
   lists: {
-    daily: { list: document.getElementById("daily-list"), empty: document.getElementById("daily-empty"), error: document.getElementById("daily-error") },
-    weekly: { list: document.getElementById("weekly-list"), empty: document.getElementById("weekly-empty"), error: document.getElementById("weekly-error") },
-    todo: { list: document.getElementById("todo-list"), empty: document.getElementById("todo-empty"), error: document.getElementById("todo-error") },
+    daily: {
+      list: document.getElementById("daily-list"),
+      empty: document.getElementById("daily-empty"),
+      error: document.getElementById("daily-error"),
+    },
+    weekly: {
+      list: document.getElementById("weekly-list"),
+      empty: document.getElementById("weekly-empty"),
+      error: document.getElementById("weekly-error"),
+    },
+    todo: {
+      list: document.getElementById("todo-list"),
+      empty: document.getElementById("todo-empty"),
+      error: document.getElementById("todo-error"),
+    },
   },
   dailyResetLabel: document.getElementById("daily-reset-label"),
   weeklyResetLabel: document.getElementById("weekly-reset-label"),
@@ -75,7 +90,8 @@ const els = {
   weeklyResetDay: document.getElementById("weekly-reset-day"),
   timezoneOffset: document.getElementById("timezone-offset"),
   saveStatus: document.getElementById("save-status"),
-  undoDelete: document.getElementById("undo-delete"),
+  bulkDeleteList: document.getElementById("bulk-delete-list"),
+  bulkDeleteBtn: document.getElementById("bulk-delete-btn"),
 };
 
 initialize();
@@ -90,20 +106,21 @@ function initialize() {
 
 function populateTimezoneOptions() {
   TIMEZONE_OPTIONS.forEach(([value, label]) => {
-    const opt = document.createElement("option");
-    opt.value = value;
-    opt.textContent = label;
-    els.timezoneOffset.appendChild(opt);
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    els.timezoneOffset.appendChild(option);
   });
 }
 
 function wireEvents() {
-  els.topTabs.forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
+  els.topTabs.forEach((tab) => {
+    tab.addEventListener("click", () => switchView(tab.dataset.view));
+  });
 
   els.statusTabs.forEach((tab) => {
     tab.addEventListener("click", () => {
-      const { list, filter } = tab.dataset;
-      state.filters[list] = filter;
+      state.filters[tab.dataset.list] = tab.dataset.filter;
       saveState();
       renderAll();
     });
@@ -112,16 +129,23 @@ function wireEvents() {
   els.addForms.forEach((form) => {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      const { list } = form.dataset;
+
+      const listType = form.dataset.list;
       const input = form.querySelector("input");
       const text = input.value.trim();
+
       if (text.length < 3) {
-        setFormError(list, "Task must be at least 3 characters.");
+        setFormError(listType, "Task must be at least 3 characters.");
         return;
       }
 
-      setFormError(list, "");
-      state.tasks[list].push({ id: crypto.randomUUID(), text, done: false });
+      setFormError(listType, "");
+      state.tasks[listType].push({
+        id: crypto.randomUUID(),
+        text,
+        done: false,
+      });
+
       input.value = "";
       saveState();
       renderAll();
@@ -149,11 +173,17 @@ function wireEvents() {
     renderAll();
   });
 
-  els.undoDelete.addEventListener("click", () => {
-    if (!state.undoDelete) return;
-    const { listType, task } = state.undoDelete;
-    state.tasks[listType].push(task);
-    state.undoDelete = null;
+  els.bulkDeleteBtn.addEventListener("click", () => {
+    const listType = els.bulkDeleteList.value;
+    const label = listType === "todo" ? "To-Do" : `${listType[0].toUpperCase()}${listType.slice(1)}`;
+    const confirmed = window.confirm(`Delete all tasks in ${label}? This cannot be undone.`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    state.tasks[listType] = [];
+    state.filters[listType] = "unfinished";
     saveState();
     renderAll();
   });
@@ -164,8 +194,13 @@ function setFormError(listType, message) {
 }
 
 function switchView(viewName) {
-  Object.entries(els.views).forEach(([name, section]) => section.classList.toggle("active", name === viewName));
-  els.topTabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === viewName));
+  Object.entries(els.views).forEach(([name, section]) => {
+    section.classList.toggle("active", name === viewName);
+  });
+
+  els.topTabs.forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.view === viewName);
+  });
 }
 
 function renderAll() {
@@ -173,8 +208,8 @@ function renderAll() {
     renderList(listType);
     syncStatusTabs(listType);
   });
+
   renderResetLabels();
-  renderUndoButton();
 }
 
 function renderList(listType) {
@@ -193,14 +228,51 @@ function renderList(listType) {
   filtered.forEach((task) => {
     const li = document.createElement("li");
     li.className = `task-item ${task.done ? "done" : ""}`;
+    li.draggable = true;
+
+    li.addEventListener("dragstart", () => {
+      dragState = { listType, taskId: task.id };
+      li.classList.add("dragging");
+    });
+
+    li.addEventListener("dragend", () => {
+      dragState = { listType: null, taskId: null };
+      li.classList.remove("dragging");
+    });
+
+    li.addEventListener("dragover", (event) => {
+      event.preventDefault();
+
+      if (dragState.listType !== listType || dragState.taskId === task.id) {
+        return;
+      }
+
+      li.classList.add("drop-target");
+    });
+
+    li.addEventListener("dragleave", () => {
+      li.classList.remove("drop-target");
+    });
+
+    li.addEventListener("drop", (event) => {
+      event.preventDefault();
+      li.classList.remove("drop-target");
+
+      if (dragState.listType !== listType || dragState.taskId === task.id) {
+        return;
+      }
+
+      reorderTask(listType, dragState.taskId, task.id);
+    });
 
     const label = document.createElement("label");
     label.className = "task-main";
-    const check = document.createElement("input");
-    check.type = "checkbox";
-    check.checked = task.done;
-    check.addEventListener("change", () => {
-      task.done = check.checked;
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = task.done;
+    checkbox.addEventListener("change", () => {
+      task.done = checkbox.checked;
       saveState();
       renderAll();
     });
@@ -208,39 +280,54 @@ function renderList(listType) {
     const text = document.createElement("span");
     text.className = "task-copy";
     text.textContent = task.text;
-    label.append(check, text);
 
-    const del = document.createElement("button");
-    del.textContent = "remove";
-    del.className = "delete-btn";
-    del.addEventListener("click", () => {
+    label.append(checkbox, text);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "remove";
+    deleteBtn.className = "delete-btn";
+    deleteBtn.addEventListener("click", () => {
       state.tasks[listType] = state.tasks[listType].filter((item) => item.id !== task.id);
-      state.undoDelete = { listType, task };
       saveState();
       renderAll();
     });
 
-    li.append(label, del);
+    li.append(label, deleteBtn);
     listEl.appendChild(li);
   });
 
   emptyEl.style.display = filtered.length === 0 ? "block" : "none";
 }
 
+function reorderTask(listType, dragId, targetId) {
+  const tasks = state.tasks[listType];
+  const fromIndex = tasks.findIndex((task) => task.id === dragId);
+  const toIndex = tasks.findIndex((task) => task.id === targetId);
+
+  if (fromIndex < 0 || toIndex < 0) {
+    return;
+  }
+
+  const [moved] = tasks.splice(fromIndex, 1);
+  tasks.splice(toIndex, 0, moved);
+
+  saveState();
+  renderAll();
+}
+
 function updateTabCount(listType, unfinishedCount, finishedCount) {
-  document.querySelector(`.status-tab[data-list="${listType}"][data-filter="unfinished"]`).textContent = `Unfinished (${unfinishedCount})`;
-  document.querySelector(`.status-tab[data-list="${listType}"][data-filter="finished"]`).textContent = `Finished (${finishedCount})`;
+  document.querySelector(`.status-tab[data-list="${listType}"][data-filter="unfinished"]`).textContent =
+    `Unfinished (${unfinishedCount})`;
+  document.querySelector(`.status-tab[data-list="${listType}"][data-filter="finished"]`).textContent =
+    `Finished (${finishedCount})`;
 }
 
 function syncStatusTabs(listType) {
   const activeFilter = state.filters[listType];
+
   document.querySelectorAll(`.status-tab[data-list="${listType}"]`).forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.filter === activeFilter);
   });
-}
-
-function renderUndoButton() {
-  els.undoDelete.disabled = !Boolean(state.undoDelete);
 }
 
 function hydrateSettingsUI() {
@@ -276,8 +363,8 @@ function runResetsIfNeeded() {
 
 function parseOffsetToMinutes(offset) {
   const sign = offset.startsWith("-") ? -1 : 1;
-  const [h, m] = offset.replace("+", "").replace("-", "").split(":").map(Number);
-  return sign * (h * 60 + m);
+  const [hours, minutes] = offset.replace("+", "").replace("-", "").split(":").map(Number);
+  return sign * (hours * 60 + minutes);
 }
 
 function toTimezoneDate(date, offset) {
@@ -295,8 +382,13 @@ function dailyPeriodId(now, timeStr, offset) {
   const tzNow = toTimezoneDate(now, offset);
   const [hour, minute] = parseTime(timeStr);
   const pivot = new Date(tzNow);
+
   pivot.setUTCHours(hour, minute, 0, 0);
-  if (tzNow < pivot) pivot.setUTCDate(pivot.getUTCDate() - 1);
+
+  if (tzNow < pivot) {
+    pivot.setUTCDate(pivot.getUTCDate() - 1);
+  }
+
   return formatDateParts(pivot);
 }
 
@@ -304,31 +396,38 @@ function weeklyPeriodId(now, resetDay, timeStr, offset) {
   const tzNow = toTimezoneDate(now, offset);
   const [hour, minute] = parseTime(timeStr);
   const pivot = new Date(tzNow);
+
   pivot.setUTCHours(hour, minute, 0, 0);
   const diffDays = (tzNow.getUTCDay() - resetDay + 7) % 7;
   pivot.setUTCDate(tzNow.getUTCDate() - diffDays);
-  if (diffDays === 0 && tzNow < pivot) pivot.setUTCDate(pivot.getUTCDate() - 7);
+
+  if (diffDays === 0 && tzNow < pivot) {
+    pivot.setUTCDate(pivot.getUTCDate() - 7);
+  }
+
   return formatDateParts(pivot);
 }
 
 function formatResetTime12h(timeStr) {
-  const [h, m] = parseTime(timeStr);
-  const ampm = h >= 12 ? "PM" : "AM";
-  const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
+  const [hour24, minute] = parseTime(timeStr);
+  const ampm = hour24 >= 12 ? "PM" : "AM";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${ampm}`;
 }
 
 function renderResetLabels() {
   const resetTime = formatResetTime12h(state.settings.resetTime);
-  const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][state.settings.weeklyResetDay];
+  const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][
+    state.settings.weeklyResetDay
+  ];
 
   els.dailyResetLabel.textContent = `Reset: ${resetTime}`;
   els.weeklyResetLabel.textContent = `Reset: ${resetTime} ${dayName}`;
 }
 
 function parseTime(value) {
-  const [h = "0", m = "0"] = value.split(":");
-  return [Number(h), Number(m)];
+  const [hour = "0", minute = "0"] = value.split(":");
+  return [Number(hour), Number(minute)];
 }
 
 function normalizeFilter(filter) {
@@ -336,7 +435,10 @@ function normalizeFilter(filter) {
 }
 
 function normalizeTaskSet(taskSet) {
-  if (!Array.isArray(taskSet)) return [];
+  if (!Array.isArray(taskSet)) {
+    return [];
+  }
+
   return taskSet
     .map((task) => ({
       id: String(task?.id || crypto.randomUUID()),
@@ -349,7 +451,11 @@ function normalizeTaskSet(taskSet) {
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return structuredClone(defaultState);
+
+    if (!raw) {
+      return structuredClone(defaultState);
+    }
+
     const parsed = JSON.parse(raw);
 
     return {
@@ -359,7 +465,10 @@ function loadState() {
         ...defaultState.settings,
         ...parsed.settings,
       },
-      periodIds: { ...defaultState.periodIds, ...parsed.periodIds },
+      periodIds: {
+        ...defaultState.periodIds,
+        ...parsed.periodIds,
+      },
       filters: {
         daily: normalizeFilter(parsed?.filters?.daily),
         weekly: normalizeFilter(parsed?.filters?.weekly),
@@ -370,7 +479,6 @@ function loadState() {
         weekly: normalizeTaskSet(parsed?.tasks?.weekly),
         todo: normalizeTaskSet(parsed?.tasks?.todo),
       },
-      undoDelete: null,
     };
   } catch {
     return structuredClone(defaultState);
@@ -379,5 +487,8 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  els.saveStatus.textContent = `Auto-saved at ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  els.saveStatus.textContent = `Auto-saved at ${new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
 }
