@@ -101,7 +101,18 @@ function initialize() {
   hydrateSettingsUI();
   runResetsIfNeeded();
   wireEvents();
+  window.setInterval(tickResets, 15000);
   renderAll();
+}
+
+function tickResets() {
+  const beforeDaily = state.periodIds.daily;
+  const beforeWeekly = state.periodIds.weekly;
+  runResetsIfNeeded();
+
+  if (beforeDaily !== state.periodIds.daily || beforeWeekly !== state.periodIds.weekly) {
+    renderAll();
+  }
 }
 
 function populateTimezoneOptions() {
