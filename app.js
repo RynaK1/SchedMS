@@ -728,6 +728,7 @@ function handleSchedmsAddSubmit(event) {
     id: taskId,
     text,
     done: false,
+    priority: false,
   };
 
   setSchedmsAddError("");
@@ -790,7 +791,7 @@ function setSchedmsAddError(message) {
   els.schedmsAddError.textContent = message;
 }
 
-function playTaskCompleteSound() {
+function playTaskCompleteSound(isPriority = false) {
   const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
 
   if (!AudioContextConstructor) {
@@ -801,6 +802,11 @@ function playTaskCompleteSound() {
 
   if (completionAudioContext.state === "suspended") {
     completionAudioContext.resume().catch(() => {});
+  }
+
+  if (isPriority) {
+    playPriorityAchievementSound(completionAudioContext);
+    return;
   }
 
   const startTime = completionAudioContext.currentTime + 0.01;
@@ -818,6 +824,21 @@ function playTaskCompleteSound() {
       note.gain,
       note.duration
     );
+  });
+}
+
+function playPriorityAchievementSound(audioContext) {
+  const startTime = audioContext.currentTime + 0.01;
+  const notes = [
+    { frequency: 783.99, offset: 0, gain: 0.036, duration: 0.09 },
+    { frequency: 987.77, offset: 0.045, gain: 0.034, duration: 0.11 },
+    { frequency: 1174.66, offset: 0.105, gain: 0.03, duration: 0.13 },
+    { frequency: 1567.98, offset: 0.19, gain: 0.024, duration: 0.22 },
+    { frequency: 1975.53, offset: 0.205, gain: 0.012, duration: 0.18 },
+  ];
+
+  notes.forEach((note) => {
+    playCompletionTone(audioContext, startTime + note.offset, note.frequency, note.gain, note.duration);
   });
 }
 
@@ -875,6 +896,7 @@ function addNewTask(listType, text, isTaskOptionsSubmit) {
       id: taskId,
       text,
       done: false,
+      priority: false,
     });
   }
 
@@ -923,6 +945,7 @@ function createRjTaskFromOptions(taskId, text) {
     id: taskId,
     text,
     done: false,
+    priority: false,
   };
 
   applyRjTaskOptions(task, true);
@@ -1765,7 +1788,9 @@ function renderList(listType) {
   visibleTasks.forEach((task) => {
     const isTaskEditing = isEditingTask(listType, task.id);
     const li = document.createElement("li");
-    li.className = `task-item ${task.done ? "done" : ""} ${isRecurringTask(task) ? "recurring-task" : ""}`;
+    li.className = `task-item ${task.done ? "done" : ""} ${task.priority ? "priority" : ""} ${
+      isRecurringTask(task) ? "recurring-task" : ""
+    }`;
     li.dataset.taskId = task.id;
     li.dataset.recurring = String(isRecurringTask(task));
     li.dataset.taskGroup = getRjTaskGroup(task);
@@ -1807,6 +1832,19 @@ function renderList(listType) {
       cleanupDragState();
       li.classList.remove("dragging");
     });
+
+    const priorityBtn = document.createElement("button");
+    priorityBtn.type = "button";
+    priorityBtn.className = `task-priority-btn ${task.priority ? "active" : ""}`;
+    priorityBtn.setAttribute("aria-label", `${task.priority ? "Remove priority from" : "Mark as priority"}: ${task.text}`);
+    priorityBtn.setAttribute("aria-pressed", String(task.priority));
+    priorityBtn.title = task.priority ? "Priority task" : "Mark priority";
+
+    const priorityIcon = document.createElement("span");
+    priorityIcon.className = "priority-star-icon";
+    priorityIcon.setAttribute("aria-hidden", "true");
+    priorityIcon.textContent = task.priority ? "\u2605" : "\u2606";
+    priorityBtn.appendChild(priorityIcon);
 
     const label = document.createElement("label");
     label.className = "task-main";
@@ -1871,12 +1909,25 @@ function renderList(listType) {
 
     if (isReadOnly || isTaskEditing) {
       checkbox.disabled = true;
+      priorityBtn.disabled = true;
       editBtn.disabled = true;
       deleteBtn.disabled = true;
     }
 
     let taskActionStarted = false;
     let taskPointerStart = null;
+    let priorityToggleStarted = false;
+
+    const togglePriority = () => {
+      if (isReadOnlyView() || priorityBtn.disabled || priorityToggleStarted) {
+        return;
+      }
+
+      priorityToggleStarted = true;
+      task.priority = !task.priority;
+      saveState();
+      renderAll();
+    };
 
     const setTaskDone = (nextDone) => {
       if (isReadOnlyView()) {
@@ -1894,7 +1945,7 @@ function renderList(listType) {
 
       taskActionStarted = true;
       if (nextDone) {
-        playTaskCompleteSound();
+        playTaskCompleteSound(task.priority);
       }
 
       const commitDoneChange = () => {
@@ -1909,7 +1960,11 @@ function renderList(listType) {
     };
 
     li.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0 || checkbox.disabled || event.target.closest(".task-action-btn")) {
+      if (
+        event.button !== 0 ||
+        checkbox.disabled ||
+        event.target.closest(".task-action-btn, .task-priority-btn")
+      ) {
         return;
       }
 
@@ -1926,7 +1981,7 @@ function renderList(listType) {
         checkbox.disabled ||
         !taskPointerStart ||
         taskPointerStart.pointerId !== event.pointerId ||
-        event.target.closest(".task-action-btn")
+        event.target.closest(".task-action-btn, .task-priority-btn")
       ) {
         taskPointerStart = null;
         return;
@@ -1950,6 +2005,21 @@ function renderList(listType) {
 
     checkbox.addEventListener("change", () => {
       setTaskDone(checkbox.checked);
+    });
+
+    priorityBtn.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || priorityBtn.disabled) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      togglePriority();
+    });
+
+    priorityBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      togglePriority();
     });
 
     const deleteTask = () => {
@@ -2043,7 +2113,7 @@ function renderList(listType) {
       deleteTask();
     });
 
-    li.append(label, actions);
+    li.append(priorityBtn, label, actions);
     listEl.appendChild(li);
   });
 
@@ -3678,6 +3748,7 @@ function normalizeTaskSet(taskSet) {
         id: String(task?.id || crypto.randomUUID()),
         text: String(task?.text || "").trim().slice(0, MAX_TASK_TEXT_LENGTH),
         done: Boolean(task?.done),
+        priority: Boolean(task?.priority),
       };
       const completedOrder = normalizeCompletionOrder(task?.completedOrder);
       const showOnDate = normalizeDateId(task?.showOnDate);
