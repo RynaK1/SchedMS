@@ -5087,12 +5087,12 @@ body:not(.rj-mode) .app:not(.rj-mode) {
 .ms-owner-label {
   display: inline-flex;
   align-items: center;
-  min-height: 1.55rem;
-  padding: 0.18rem 0.55rem;
+  min-height: 1.95rem;
+  padding: 0.28rem 0.75rem;
   color: var(--text);
   background: var(--control-hover);
   border: 1px solid var(--border);
-  font-size: 0.78rem;
+  font-size: 0.95rem;
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0.02em;
@@ -5107,16 +5107,18 @@ body:not(.rj-mode) .app:not(.rj-mode) {
   border-top: 0;
 }
 
-/* MS owner strip sits inside the outer frame, above the three list regions. */
+/* MS owner strip sits in a compact footer inside each outer frame. */
 .app:not(.rj-mode) .list-stack {
   position: relative;
-  padding-top: 2.35rem;
+  padding-top: 0;
+  padding-bottom: 2.65rem;
   box-sizing: border-box;
 }
 
 .app:not(.rj-mode) .list-stack > .ms-owner-label {
   position: absolute;
-  top: 0.48rem;
+  top: auto;
+  bottom: 0.48rem;
   left: 0.7rem;
   z-index: 5;
 }
