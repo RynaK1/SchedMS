@@ -8,7 +8,6 @@ const SUPABASE_PROFILE_TABLE = "planner_profiles";
 const SUPABASE_PAIRING_TABLE = "planner_pairings";
 const AUTH_MIGRATION_KEY = `${STORAGE_KEY}-auth-migrated-user`;
 const LIST_TYPES = ["daily", "weekly", "persistent"];
-const RJ_LIST_TYPES = ["persistent"];
 const LIST_SET_IDS = ["schedms", "rj"];
 const DEFAULT_LIST_SET_ID = "schedms";
 const INITIAL_LIST_SET_ID = "rj";
@@ -20,15 +19,6 @@ const RJ_TASK_GROUPS = ["recurring-open", "one-time-open", "done"];
 const RJ_TASK_OPTION_ONE_TIME = "one-time";
 const RJ_TASK_OPTION_DAILY = "daily";
 const RJ_TASK_OPTION_WEEKLY = "weekly";
-const LIST_SET_LABELS = {
-  schedms: "MS",
-  rj: "IRL",
-};
-const LIST_LABELS = {
-  daily: "Daily",
-  weekly: "Weekly",
-  persistent: "To-Do",
-};
 const ADD_TASK_SYMBOL = "";
 const SAVE_TASK_SYMBOL = "✓";
 const DEFAULT_TIMEZONE_OFFSET = "-08:00";
@@ -38,7 +28,7 @@ const DAY_SHORT_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const RECURRING_PANEL_MOTION_MS = 180;
 const RECURRING_PANEL_CLOSE_DELAY_MS = 180;
 const RECURRING_FORM_MOTION_MS = 260;
-const CUSTOM_SELECT_CLOSE_MS = 120;
+const CUSTOM_SELECT_CLOSE_MS = 84;
 const EDIT_TASK_MOTION_MS = 420;
 const EDIT_CANCEL_MOTION_MS = 220;
 const ADD_TASK_PLACEHOLDERS = {
@@ -115,10 +105,6 @@ function getActiveListSet() {
   return state.listSets[state.activeListSet];
 }
 
-function getListSetLabel(listSetId = state.activeListSet) {
-  return LIST_SET_LABELS[normalizeListSetId(listSetId)];
-}
-
 function normalizeListSetId(listSetId) {
   return LIST_SET_IDS.includes(listSetId) ? listSetId : DEFAULT_LIST_SET_ID;
 }
@@ -140,7 +126,7 @@ function showInitialListSet() {
 }
 
 function isReadOnlyView() {
-  return plannerViewMode === "partner";
+  return false;
 }
 
 function getAcceptedPairing() {
@@ -165,7 +151,9 @@ let editState = null;
 let recurringPanelOpen = false;
 let recurringPanelCloseTimer = null;
 let recurringPanelHoverCloseTimer = null;
+let partnerRecurringHoverCloseTimer = null;
 let recurringCreateMode = false;
+let recurringFormPinned = false;
 let recurringFormCloseTimer = null;
 let completionAudioContext = null;
 let openCustomSelect = null;
@@ -181,7 +169,6 @@ let authMode = "sign-in";
 let pendingLegacyMigrationUserId = "";
 let selfState = state;
 let partnerState = null;
-let plannerViewMode = "self";
 let pairingContext = {
   accepted: null,
   incoming: null,
@@ -208,9 +195,6 @@ const els = {
   authUserLabel: document.getElementById("auth-user-label"),
   authSignOutBtn: document.getElementById("auth-sign-out-btn"),
   listsView: document.getElementById("lists-view"),
-  plannerOwnerSwitcher: document.getElementById("planner-owner-switcher"),
-  plannerOwnerButtons: document.querySelectorAll(".planner-owner-switch"),
-  partnerOwnerSwitch: document.getElementById("partner-owner-switch"),
   pairingForm: document.getElementById("pairing-form"),
   pairingEmail: document.getElementById("pairing-email"),
   pairingInviteBtn: document.getElementById("pairing-invite-btn"),
@@ -245,9 +229,33 @@ const els = {
   settingsOpenBtn: document.getElementById("settings-open-btn"),
   settingsCloseBtn: document.getElementById("settings-close-btn"),
   settingsModal: document.getElementById("settings-modal"),
-  rjProgress: document.querySelector(".rj-progress"),
-  rjProgressFill: document.getElementById("rj-progress-fill"),
-  rjProgressLabel: document.getElementById("rj-progress-label"),
+  persistentListTitle: document.getElementById("persistent-list-title"),
+  partnerRjCard: document.getElementById("partner-rj-card"),
+  partnerRjTitle: document.getElementById("partner-rj-title"),
+  partnerRjList: document.getElementById("partner-rj-list"),
+  partnerRjEmpty: document.getElementById("partner-rj-empty"),
+  partnerRecurringPanel: document.getElementById("partner-recurring-panel"),
+  partnerRecurringPanelCount: document.getElementById("partner-recurring-panel-count"),
+  partnerRecurringPanelList: document.getElementById("partner-recurring-panel-list"),
+  partnerRecurringPanelEmpty: document.getElementById("partner-recurring-panel-empty"),
+  rjComposer: document.getElementById("rj-composer"),
+  mineMsTitle: document.getElementById("mine-ms-title"),
+  partnerMsSection: document.getElementById("partner-ms-section"),
+  partnerMsTitle: document.getElementById("partner-ms-title"),
+  partnerMsLists: {
+    daily: {
+      list: document.getElementById("partner-ms-daily-list"),
+      empty: document.getElementById("partner-ms-daily-empty"),
+    },
+    weekly: {
+      list: document.getElementById("partner-ms-weekly-list"),
+      empty: document.getElementById("partner-ms-weekly-empty"),
+    },
+    persistent: {
+      list: document.getElementById("partner-ms-persistent-list"),
+      empty: document.getElementById("partner-ms-persistent-empty"),
+    },
+  },
   schedmsQuickAdd: document.getElementById("schedms-quick-add"),
   schedmsAddForm: document.getElementById("schedms-add-form"),
   schedmsInput: document.getElementById("schedms-input"),
@@ -266,10 +274,6 @@ const els = {
   recurringPanelEmpty: document.getElementById("recurring-panel-empty"),
   recurringPanelCount: document.getElementById("recurring-panel-count"),
   listSetButtons: document.querySelectorAll(".list-set-switch"),
-  deleteListButtons: document.querySelectorAll(".list-delete-btn"),
-  deleteConfirmPanels: document.querySelectorAll(".delete-confirm"),
-  confirmDeleteButtons: document.querySelectorAll("[data-confirm-delete]"),
-  cancelDeleteButtons: document.querySelectorAll("[data-cancel-delete]"),
   cancelEditButtons: document.querySelectorAll("[data-cancel-edit]"),
   addForms: document.querySelectorAll(".add-task-form"),
   lists: {
@@ -371,9 +375,6 @@ function wireEvents() {
   els.authSignInMode.addEventListener("click", () => setAuthMode("sign-in"));
   els.authSignUpMode.addEventListener("click", () => setAuthMode("sign-up"));
   els.authSignOutBtn.addEventListener("click", handleSignOut);
-  els.plannerOwnerButtons.forEach((button) => {
-    button.addEventListener("click", () => switchPlannerOwner(button.dataset.plannerOwner));
-  });
   els.pairingForm.addEventListener("submit", handlePairingInviteSubmit);
   els.pairingAcceptBtn.addEventListener("click", () => respondToIncomingPairing(true));
   els.pairingDeclineBtn.addEventListener("click", () => respondToIncomingPairing(false));
@@ -407,7 +408,7 @@ function wireEvents() {
     button.addEventListener("click", () => switchListSet(button.dataset.listSet));
   });
 
-  els.recurringToggleBtn.addEventListener("click", toggleRecurringForm);
+  els.recurringToggleBtn.addEventListener("click", toggleRecurringFormPin);
   els.recurringInterval.addEventListener("change", handleRecurringIntervalChange);
   els.recurringShowDays.addEventListener("change", handleRecurringShowDayChange);
   els.recurringPanel.addEventListener("pointerenter", openRecurringPanel);
@@ -417,21 +418,8 @@ function wireEvents() {
   els.recurringPanel.addEventListener("focusin", openRecurringPanel);
   els.recurringPanel.addEventListener("focusout", closeRecurringPanelAfterFocusLeaves);
   els.recurringPanelToggle.addEventListener("click", handleRecurringPanelToggleClick);
-
-  els.deleteListButtons.forEach((button) => {
-    const listType = button.dataset.deleteList;
-    if (LIST_TYPES.includes(listType)) {
-      button.addEventListener("click", () => showDeleteConfirm(listType));
-    }
-  });
-
-  els.confirmDeleteButtons.forEach((button) => {
-    button.addEventListener("click", () => deleteAllTasks(button.dataset.confirmDelete));
-  });
-
-  els.cancelDeleteButtons.forEach((button) => {
-    button.addEventListener("click", () => hideDeleteConfirm(button.dataset.cancelDelete));
-  });
+  els.partnerRecurringPanel.addEventListener("pointerenter", openPartnerRecurringPanel);
+  els.partnerRecurringPanel.addEventListener("pointerleave", schedulePartnerRecurringPanelClose);
 
   els.cancelEditButtons.forEach((button) => {
     button.addEventListener("click", () =>
@@ -606,6 +594,7 @@ function openCustomSelectMenu(wrapper) {
   syncCustomSelect(select);
 
   menu.hidden = false;
+  void menu.offsetHeight;
   wrapper.closest(".settings-dialog")?.classList.add("select-menu-open");
   wrapper.classList.remove("closing");
   wrapper.classList.add("open");
@@ -905,6 +894,7 @@ function addNewTask(listType, text, isTaskOptionsSubmit) {
 
   getTaskInput(listType).value = "";
   resetRecurringShowDayControls();
+  closeRecurringForm({ immediate: true });
   saveState();
   renderAll();
 }
@@ -1018,7 +1008,6 @@ function switchListSet(listSetId) {
 
   cleanupDragState();
   closeCustomSelect(openCustomSelect, true);
-  hideDeleteConfirm();
   cancelTaskEdit();
   state.activeListSet = nextListSetId;
   if (!isReadOnlyView()) {
@@ -1028,46 +1017,8 @@ function switchListSet(listSetId) {
   renderAll();
 }
 
-function switchPlannerOwner(owner) {
-  const nextOwner = owner === "partner" ? "partner" : "self";
-  const visibleListSetId = getVisibleListSetId();
-
-  if (plannerViewMode === nextOwner) {
-    return;
-  }
-
-  if (nextOwner === "partner" && !getAcceptedPairing()) {
-    return;
-  }
-
-  cleanupDragState();
-  closeCustomSelect(openCustomSelect, true);
-  hideDeleteConfirm();
-  cancelTaskEdit();
-  closeRecurringForm({ immediate: true });
-
-  if (plannerViewMode === "self") {
-    selfState = state;
-  } else {
-    partnerState = state;
-  }
-
-  plannerViewMode = nextOwner;
-  state = plannerViewMode === "partner" ? partnerState || createPartnerFallbackState() : selfState;
-  setPlannerStateListSet(state, visibleListSetId);
-  hydrateSettingsUI();
-  renderAll();
-  renderPairingControls();
-  renderSaveStatus();
-
-  if (plannerViewMode === "partner") {
-    void loadPartnerPlannerState();
-  }
-}
-
 function openSettingsModal() {
   hydrateSettingsUI();
-  hideDeleteConfirm();
   hidePairedNameEditor();
   resetPasswordSection();
   hideDeleteAccountConfirm({ restoreFocus: false });
@@ -1080,19 +1031,10 @@ function closeSettingsModal() {
   closeCustomSelect(openCustomSelect, true);
   els.settingsModal.hidden = true;
   els.settingsOpenBtn.setAttribute("aria-expanded", "false");
-  hideDeleteConfirm();
   hidePairedNameEditor();
   resetPasswordSection();
   hideDeleteAccountConfirm({ restoreFocus: false });
   els.settingsOpenBtn.focus();
-}
-
-function toggleRecurringForm() {
-  if (isReadOnlyView()) {
-    return;
-  }
-
-  setRecurringCreateMode(!recurringCreateMode);
 }
 
 function setRecurringCreateMode(isActive) {
@@ -1135,12 +1077,33 @@ function setRecurringCreateMode(isActive) {
 }
 
 function closeRecurringForm({ immediate = false } = {}) {
+  recurringFormPinned = false;
   setRecurringCreateMode(false);
 
   if (immediate) {
     window.clearTimeout(recurringFormCloseTimer);
     recurringFormCloseTimer = null;
     els.recurringForm.hidden = true;
+  }
+}
+
+function openRecurringFormPopover() {
+  if (!isReadOnlyView()) {
+    setRecurringCreateMode(true);
+  }
+}
+
+function toggleRecurringFormPin() {
+  if (isReadOnlyView()) {
+    return;
+  }
+
+  recurringFormPinned = !recurringFormPinned;
+
+  if (recurringFormPinned) {
+    openRecurringFormPopover();
+  } else {
+    closeRecurringForm({ immediate: true });
   }
 }
 
@@ -1296,22 +1259,6 @@ function prepareTaskEditMode(listType, task) {
   }
 
   setTaskFormEditingState(listType, true);
-}
-
-function enterTaskEditMode(listType, taskId) {
-  if (isReadOnlyView()) {
-    return;
-  }
-
-  const task = getActiveListSet().tasks[listType].find((item) => item.id === taskId);
-
-  if (!task) {
-    return;
-  }
-
-  prepareTaskEditMode(listType, task);
-  renderAll();
-  focusTaskEditInput(listType);
 }
 
 function focusTaskEditInput(listType) {
@@ -1614,63 +1561,6 @@ function setRecurringError(message) {
   els.recurringError.textContent = message;
 }
 
-function showDeleteConfirm(confirmKey) {
-  if (!LIST_TYPES.includes(confirmKey)) {
-    return;
-  }
-
-  let activePanel = null;
-  els.deleteConfirmPanels.forEach((panel) => {
-    const isActive = panel.dataset.confirmList === confirmKey;
-    panel.hidden = !isActive;
-    panel.closest("[data-delete-control]")?.classList.toggle("confirming", isActive);
-    panel.closest(".card-meta")?.classList.toggle("confirming", isActive);
-
-    if (isActive) {
-      activePanel = panel;
-    }
-  });
-
-  activePanel?.querySelector("[data-cancel-delete]")?.focus();
-}
-
-function hideDeleteConfirm(listType = null) {
-  let restoredButton = null;
-  els.deleteConfirmPanels.forEach((panel) => {
-    if (!listType || panel.dataset.confirmList === listType) {
-      panel.hidden = true;
-      const control = panel.closest("[data-delete-control]");
-      panel.closest(".card-meta")?.classList.remove("confirming");
-      control?.classList.remove("confirming");
-
-      if (listType) {
-        restoredButton = control?.querySelector("[data-delete-list]");
-      }
-    }
-  });
-
-  restoredButton?.focus();
-}
-
-function deleteAllTasks(listType) {
-  if (isReadOnlyView()) {
-    return;
-  }
-
-  if (!LIST_TYPES.includes(listType)) {
-    return;
-  }
-
-  const activeSet = getActiveListSet();
-  activeSet.tasks[listType] = [];
-  if (isEditingTask(listType)) {
-    finishTaskEdit(listType);
-  }
-  hideDeleteConfirm();
-  saveState();
-  renderAll();
-}
-
 function removeTaskFromList(listType, taskId) {
   const activeSet = getActiveListSet();
   const tasks = activeSet.tasks[listType];
@@ -1698,13 +1588,14 @@ function removeTaskFromList(listType, taskId) {
 function renderAll() {
   renderActiveLayout();
   renderListSetSwitcher();
-  renderPlannerOwnerSwitcher();
   renderPairingControls();
 
   LIST_TYPES.forEach((listType) => {
     renderList(listType);
   });
 
+  renderPartnerRjList();
+  renderPartnerMsLists();
   renderRecurringPanel();
   renderResetLabels();
 }
@@ -1715,9 +1606,8 @@ function renderActiveLayout() {
 
   document.body.classList.toggle("rj-mode", isRjMode);
   els.app.classList.toggle("rj-mode", isRjMode);
-  els.app.classList.toggle("partner-view", isReadOnly);
   els.schedmsQuickAdd.hidden = isReadOnly || isRjMode;
-  els.rjProgress.hidden = !isRjMode;
+  els.rjComposer.hidden = !isRjMode || isReadOnly;
   els.recurringTools.hidden = !isRjMode;
   els.recurringPanel.hidden = !isRjMode;
   els.timezoneOffset.disabled = isReadOnly;
@@ -1726,6 +1616,13 @@ function renderActiveLayout() {
   els.recurringToggleBtn.disabled = isReadOnly;
   els.lists.daily.card.hidden = isRjMode;
   els.lists.weekly.card.hidden = isRjMode;
+  const hasPairedRjList = isRjMode && Boolean(getAcceptedPairing());
+  const hasPairedMsLists = !isRjMode && Boolean(getAcceptedPairing());
+  els.app.classList.toggle("paired-rj", hasPairedRjList);
+  els.partnerRjCard.hidden = !hasPairedRjList;
+  els.mineMsTitle.hidden = !hasPairedMsLists;
+  els.partnerMsSection.hidden = !hasPairedMsLists;
+  els.persistentListTitle.textContent = hasPairedRjList ? "Mine" : "To-Do";
 
   if (!isRjMode) {
     closeRecurringForm();
@@ -1734,7 +1631,6 @@ function renderActiveLayout() {
 
   if (isRjMode) {
     setRecurringPanelOpen(recurringPanelOpen);
-    renderRjProgress();
   }
 }
 
@@ -1746,28 +1642,173 @@ function renderListSetSwitcher() {
   });
 }
 
-function renderPlannerOwnerSwitcher() {
+function renderPartnerRjList() {
   const acceptedPairing = getAcceptedPairing();
+  const shouldShow = state.activeListSet === "rj" && Boolean(acceptedPairing);
 
-  els.plannerOwnerSwitcher.hidden = !acceptedPairing;
-  els.partnerOwnerSwitch.textContent = acceptedPairing ? getPairingDisplayName(acceptedPairing) : "Partner";
+  els.partnerRjCard.hidden = !shouldShow;
+  els.partnerRjList.innerHTML = "";
 
-  els.plannerOwnerButtons.forEach((button) => {
-    const isActive = button.dataset.plannerOwner === plannerViewMode;
-    button.classList.toggle("active", isActive);
-    button.setAttribute("aria-pressed", String(isActive));
+  if (!shouldShow) {
+    return;
+  }
+
+  const partnerName = getPairingDisplayName(acceptedPairing);
+  els.partnerRjTitle.textContent = partnerName;
+  els.partnerRjList.setAttribute("aria-label", `${partnerName}'s IRL list`);
+
+  const tasks = partnerState?.listSets?.rj?.tasks?.persistent || [];
+  const visibleTasks = getVisibleTasksForList("persistent", orderTasksForList("persistent", tasks));
+
+  visibleTasks.forEach((task) => {
+    const item = document.createElement("li");
+    item.className = `task-item partner-task-item ${task.done ? "done" : ""} ${task.priority ? "priority" : ""} ${
+      isRecurringTask(task) ? "recurring-task" : ""
+    }`;
+
+    const priority = document.createElement("span");
+    priority.className = `task-priority-btn ${task.priority ? "active" : ""}`;
+    priority.setAttribute("aria-hidden", "true");
+    const priorityIcon = document.createElement("span");
+    priorityIcon.className = "priority-star-icon";
+    priorityIcon.textContent = task.priority ? "\u2605" : "\u2606";
+    priority.appendChild(priorityIcon);
+
+    const label = document.createElement("label");
+    label.className = "task-main";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = task.done;
+    checkbox.disabled = true;
+    checkbox.setAttribute("aria-label", `${task.text} (read only)`);
+    const copy = document.createElement("span");
+    copy.className = "task-copy";
+    copy.textContent = task.text;
+    label.append(checkbox, copy);
+
+    if (isRecurringTask(task)) {
+      const daysLeftText = formatRecurringDaysLeft(task);
+      if (daysLeftText) {
+        const daysLeft = document.createElement("span");
+        daysLeft.className = "task-days-left";
+        daysLeft.textContent = daysLeftText;
+        label.appendChild(daysLeft);
+      }
+      const badge = document.createElement("span");
+      badge.className = "task-badge";
+      badge.textContent = "\u21bb";
+      badge.title = `${formatRecurringIntervalLabel(task.intervalDays)}; ${formatRecurringShowDays(task)}`;
+      label.appendChild(badge);
+    }
+
+    item.append(priority, label);
+    els.partnerRjList.appendChild(item);
+  });
+
+  els.partnerRjEmpty.hidden = visibleTasks.length > 0;
+  renderPartnerRecurringPanel(tasks);
+}
+
+function openPartnerRecurringPanel() {
+  if (partnerRecurringHoverCloseTimer !== null) {
+    window.clearTimeout(partnerRecurringHoverCloseTimer);
+    partnerRecurringHoverCloseTimer = null;
+  }
+
+  els.partnerRecurringPanel.classList.add("hover-open");
+}
+
+function schedulePartnerRecurringPanelClose() {
+  if (partnerRecurringHoverCloseTimer !== null) {
+    window.clearTimeout(partnerRecurringHoverCloseTimer);
+  }
+
+  partnerRecurringHoverCloseTimer = window.setTimeout(() => {
+    if (!els.partnerRecurringPanel.matches(":hover, :focus-within")) {
+      els.partnerRecurringPanel.classList.remove("hover-open");
+    }
+    partnerRecurringHoverCloseTimer = null;
+  }, 180);
+}
+
+function renderPartnerRecurringPanel(tasks) {
+  const scheduledTasks = getScheduledPanelTasks(tasks);
+  els.partnerRecurringPanel.hidden = false;
+  els.partnerRecurringPanelCount.textContent = String(scheduledTasks.length);
+  els.partnerRecurringPanelList.innerHTML = "";
+
+  scheduledTasks.forEach((task) => {
+    const item = document.createElement("li");
+    item.className = `recurring-summary-item ${task.done ? "done" : ""}`;
+    const copy = document.createElement("div");
+    copy.className = "recurring-summary-copy";
+    const title = document.createElement("span");
+    title.className = "recurring-summary-title";
+    title.textContent = task.text;
+    const meta = document.createElement("span");
+    meta.className = "recurring-summary-meta";
+    meta.textContent = formatScheduledPanelMeta(task);
+    copy.append(title, meta);
+    item.appendChild(copy);
+    els.partnerRecurringPanelList.appendChild(item);
+  });
+
+  els.partnerRecurringPanelEmpty.hidden = scheduledTasks.length > 0;
+}
+
+function renderPartnerMsLists() {
+  const acceptedPairing = getAcceptedPairing();
+  const shouldShow = state.activeListSet === "schedms" && Boolean(acceptedPairing);
+
+  els.partnerMsSection.hidden = !shouldShow;
+  els.mineMsTitle.hidden = !shouldShow;
+
+  if (!shouldShow) {
+    return;
+  }
+
+  els.partnerMsTitle.textContent = getPairingDisplayName(acceptedPairing);
+
+  LIST_TYPES.forEach((listType) => {
+    const target = els.partnerMsLists[listType];
+    const tasks = partnerState?.listSets?.schedms?.tasks?.[listType] || [];
+    renderReadOnlyTaskList(listType, tasks, target.list, target.empty);
   });
 }
 
-function renderRjProgress() {
-  const tasks = RJ_LIST_TYPES.flatMap((listType) => getVisibleTasksForList(listType, getActiveListSet().tasks[listType]));
-  const totalCount = tasks.length;
-  const finishedCount = tasks.filter((task) => task.done).length;
-  const progress = totalCount === 0 ? 0 : Math.round((finishedCount / totalCount) * 100);
+function renderReadOnlyTaskList(listType, tasks, listEl, emptyEl) {
+  const visibleTasks = getVisibleTasksForList(listType, orderTasksForList(listType, tasks));
+  listEl.innerHTML = "";
 
-  els.rjProgressFill.style.width = `${progress}%`;
-  els.rjProgressLabel.textContent = `${progress}%`;
-  els.rjProgress.querySelector(".progress-track").setAttribute("aria-valuenow", String(progress));
+  visibleTasks.forEach((task) => {
+    const item = document.createElement("li");
+    item.className = `task-item partner-task-item ${task.done ? "done" : ""} ${task.priority ? "priority" : ""}`;
+
+    const priority = document.createElement("span");
+    priority.className = `task-priority-btn ${task.priority ? "active" : ""}`;
+    priority.setAttribute("aria-hidden", "true");
+    const priorityIcon = document.createElement("span");
+    priorityIcon.className = "priority-star-icon";
+    priorityIcon.textContent = task.priority ? "\u2605" : "\u2606";
+    priority.appendChild(priorityIcon);
+
+    const label = document.createElement("label");
+    label.className = "task-main";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = task.done;
+    checkbox.disabled = true;
+    checkbox.setAttribute("aria-label", `${task.text} (read only)`);
+    const copy = document.createElement("span");
+    copy.className = "task-copy";
+    copy.textContent = task.text;
+    label.append(checkbox, copy);
+
+    item.append(priority, label);
+    listEl.appendChild(item);
+  });
+
+  emptyEl.hidden = visibleTasks.length > 0;
 }
 
 function renderList(listType) {
@@ -2046,7 +2087,6 @@ function renderList(listType) {
 
       if (usesRecurringTaskGrouping(listType)) {
         renderRecurringPanel();
-        renderRjProgress();
       }
 
       emptyEl.style.display = "none";
@@ -2535,53 +2575,6 @@ function animateListReflow(listType, beforePositions) {
       }, 130);
     });
   });
-}
-
-function runRecurringCompleteAnimation(itemEl, onDone) {
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !els.recurringPanelToggle) {
-    onDone();
-    return;
-  }
-
-  let finished = false;
-  const sourceRect = itemEl.getBoundingClientRect();
-  const targetRect = els.recurringPanelToggle.getBoundingClientRect();
-  const sourceCenterX = sourceRect.left + sourceRect.width / 2;
-  const sourceCenterY = sourceRect.top + sourceRect.height / 2;
-  const targetCenterX = targetRect.left + targetRect.width / 2;
-  const targetCenterY = targetRect.top + targetRect.height / 2;
-  const flyer = itemEl.cloneNode(true);
-  const itemStyles = window.getComputedStyle(itemEl);
-
-  const finish = () => {
-    if (finished) {
-      return;
-    }
-
-    finished = true;
-    flyer.remove();
-    els.recurringPanelToggle.classList.remove("recurring-catch-pulse");
-    onDone();
-  };
-
-  itemEl.classList.add("recurring-complete-origin");
-  itemEl.style.setProperty("--task-exit-height", `${sourceRect.height}px`);
-  itemEl.style.setProperty("--task-exit-margin-bottom", itemStyles.marginBottom);
-  flyer.classList.add("recurring-complete-flyer");
-  flyer.style.left = `${sourceRect.left}px`;
-  flyer.style.top = `${sourceRect.top}px`;
-  flyer.style.width = `${sourceRect.width}px`;
-  flyer.style.minHeight = `${sourceRect.height}px`;
-  flyer.style.setProperty("--recurring-complete-x", `${targetCenterX - sourceCenterX}px`);
-  flyer.style.setProperty("--recurring-complete-y", `${targetCenterY - sourceCenterY}px`);
-
-  els.recurringPanelToggle.classList.remove("recurring-catch-pulse");
-  void els.recurringPanelToggle.offsetWidth;
-  els.recurringPanelToggle.classList.add("recurring-catch-pulse");
-  document.body.appendChild(flyer);
-
-  flyer.addEventListener("animationend", finish, { once: true });
-  window.setTimeout(finish, 500);
 }
 
 function runTaskEditAnimation(itemEl, listType, task, onDone) {
@@ -3528,12 +3521,6 @@ function formatRecurringDaysLeft(task) {
   return daysLeft === 1 ? "final day" : `${daysLeft} days left`;
 }
 
-function formatRecurringListBadge(task) {
-  const showDays = getEffectiveRecurringShowDays(task);
-
-  return showDays.length > 0 ? formatRecurringShowDays(task) : formatRecurringIntervalLabel(task.intervalDays);
-}
-
 function formatRecurringIntervalLabel(intervalDays) {
   const normalizedInterval = normalizeRecurringIntervalDays(intervalDays);
 
@@ -3906,7 +3893,6 @@ async function loadAuthenticatedPlanner(user) {
   supabaseUserId = user.id;
   signedInUserEmail = user.email || "Signed in";
   activeStorageKey = getUserStorageKey(user.id);
-  plannerViewMode = "self";
   partnerState = null;
   pairingContext = createEmptyPairingContext();
 
@@ -4029,14 +4015,6 @@ async function refreshPairingContext({ silent = false } = {}) {
     context.profiles = await loadPlannerProfiles([...new Set(profileIds)]);
     pairingContext = context;
 
-    if (!context.accepted && plannerViewMode === "partner") {
-      const visibleListSetId = getVisibleListSetId();
-      plannerViewMode = "self";
-      state = selfState;
-      setPlannerStateListSet(state, visibleListSetId);
-      partnerState = null;
-    }
-
     if (context.accepted) {
       await loadPartnerPlannerState({ silent: true });
     } else {
@@ -4044,7 +4022,6 @@ async function refreshPairingContext({ silent = false } = {}) {
     }
 
     renderPairingControls();
-    renderPlannerOwnerSwitcher();
     renderSaveStatus();
   } catch (error) {
     if (!silent) {
@@ -4095,12 +4072,12 @@ async function loadPartnerPlannerState({ silent = false } = {}) {
     partnerState = data?.data ? normalizeStateData(data.data) : createPartnerFallbackState();
     setPlannerStateListSet(partnerState, visibleListSetId);
 
-    if (plannerViewMode === "partner") {
-      state = partnerState;
-      setPlannerStateListSet(state, visibleListSetId);
-      hydrateSettingsUI();
-      renderAll();
+    if (state.activeListSet === "rj") {
+      renderPartnerRjList();
+    } else {
+      renderPartnerMsLists();
     }
+
   } catch (error) {
     if (!silent) {
       setPairingMessage(formatSupabaseError(error), true);
@@ -4179,7 +4156,6 @@ function handlePairedDisplayNameInput() {
 
   selfState.settings.pairedAccountDisplayName = nextName;
   saveSelfState();
-  renderPlannerOwnerSwitcher();
   renderPairingControls();
 }
 
@@ -4280,16 +4256,6 @@ async function deletePairing(pairingId, successMessage) {
 
     if (error) {
       throw error;
-    }
-
-    if (plannerViewMode === "partner") {
-      const visibleListSetId = getVisibleListSetId();
-      plannerViewMode = "self";
-      state = selfState;
-      setPlannerStateListSet(state, visibleListSetId);
-      partnerState = null;
-      hydrateSettingsUI();
-      renderAll();
     }
 
     setPairingMessage(successMessage);
@@ -4652,7 +4618,6 @@ function showAuthView(message = "", isError = false) {
   state = structuredClone(defaultState);
   selfState = state;
   partnerState = null;
-  plannerViewMode = "self";
   pairingContext = createEmptyPairingContext();
   closeSettingsModal();
   renderAll();
@@ -4671,7 +4636,6 @@ function showPlannerView() {
   els.listsView.hidden = false;
   els.authUserLabel.textContent = signedInUserEmail;
   setAuthMessage("");
-  renderPlannerOwnerSwitcher();
   renderPairingControls();
 }
 

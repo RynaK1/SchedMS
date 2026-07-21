@@ -26,8 +26,6 @@
   --space-sm: 0.65rem;
   --space-md: 1rem;
   --space-lg: 1.35rem;
-  --delete-button-width: 4.4rem;
-  --delete-control-height: 1.9rem;
   --task-gap: 0.55rem;
   --recurring-panel-motion: 180ms;
   --recurring-panel-width: clamp(17rem, 28vw, 21rem);
@@ -328,77 +326,6 @@ input:focus-visible {
   overflow: hidden;
 }
 
-.rj-progress {
-  flex: 0 0 auto;
-  margin: 0 0.1rem;
-  padding: 0.95rem;
-  background: #eef3ea;
-  border: 1px solid #b8c4b8;
-  border-radius: 8px;
-  box-shadow: 0 10px 24px rgba(55, 72, 54, 0.1);
-}
-
-.rj-progress[hidden] {
-  display: none;
-}
-
-.app.rj-mode .rj-progress {
-  background: #d9ded5;
-  border-color: #9fb0a4;
-}
-
-.app.rj-mode .progress-labels {
-  color: #526356;
-}
-
-.app.rj-mode .progress-track {
-  background: #e8eee3;
-  border-color: #9fb0a4;
-}
-
-.app.rj-mode .progress-fill {
-  background: linear-gradient(90deg, #374836, var(--accent));
-}
-
-.app.rj-mode .progress-labels strong {
-  color: #263126;
-}
-
-.progress-labels {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-bottom: 0.42rem;
-  color: #687064;
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.progress-labels span:last-child {
-  text-align: right;
-}
-
-.progress-labels strong {
-  color: #263126;
-  font-size: 0.92rem;
-}
-
-.progress-track {
-  height: 0.78rem;
-  overflow: hidden;
-  background: #e5ece4;
-  border: 1px solid #b8c4b8;
-  border-radius: 999px;
-}
-
-.progress-fill {
-  width: 0;
-  height: 100%;
-  background: linear-gradient(90deg, var(--daily), var(--accent));
-  transition: width 0.16s ease-out;
-}
-
 .app.rj-mode #lists-view {
   flex-direction: column;
   gap: var(--space-lg);
@@ -482,17 +409,43 @@ input:focus-visible {
 }
 
 .app.rj-mode .list-stack {
-  display: flex;
+  display: grid;
   flex: 1 1 auto;
   align-items: stretch;
-  justify-content: center;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: none;
   margin-top: 0;
   overflow: visible;
 }
 
 .app.rj-mode .persistent-card {
-  flex: 1 1 auto;
   max-width: 48rem;
+  width: 100%;
+  justify-self: center;
+}
+
+.app.rj-mode .persistent-card:only-child {
+  grid-column: 1 / -1;
+}
+
+.app.rj-mode .partner-rj-card {
+  cursor: default;
+}
+
+.app.rj-mode .partner-rj-card .task-item {
+  cursor: default;
+}
+
+.app.rj-mode .partner-rj-card .task-item:hover {
+  background: #e8eee3;
+  border-color: #a9b8ac;
+  box-shadow: none;
+}
+
+.app.rj-mode .partner-rj-card .task-item.done:hover {
+  background: #edf4eb;
+  border-color: #9fb0a4;
 }
 
 .todo-card[hidden] {
@@ -508,7 +461,7 @@ input:focus-visible {
 }
 
 .app.rj-mode .add-task-form {
-  margin: 0.58rem 0 0.28rem;
+  margin: 0.58rem 0 0.16rem;
 }
 
 .app.rj-mode .form-msg {
@@ -912,86 +865,16 @@ input:focus-visible {
   white-space: nowrap;
 }
 
-.card-meta.confirming .reset-label {
-  max-width: 0;
-  opacity: 0;
-  transform: translateX(-0.5rem);
-}
-
-.list-delete-btn,
-.confirm-cancel-btn,
 .confirm-delete-btn {
-  min-height: var(--delete-control-height);
+  min-height: 1.9rem;
   padding: 0.16rem 0.52rem;
   font-size: 0.74rem;
   line-height: 1;
 }
 
-.delete-control {
-  position: relative;
-  flex: 0 0 var(--delete-button-width);
-  width: var(--delete-button-width);
-  height: var(--delete-control-height);
-}
-
-.list-delete-btn {
-  --button-hover-bg: var(--danger-bg);
-  --button-hover-border: #ad766e;
-  --button-active-bg: #e5bdb7;
-  --button-active-border: #9a655f;
-  position: absolute;
-  inset: 0 0 auto auto;
-  width: var(--delete-button-width);
-  border-color: var(--danger-border);
-  background: transparent;
-  color: var(--danger-text);
-}
-
-.delete-control.confirming .list-delete-btn {
-  visibility: hidden;
-}
-
-.list-delete-btn:hover,
 .confirm-delete-btn:hover {
   background: var(--danger-bg);
   border-color: #ad766e;
-}
-
-.delete-confirm {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: clamp(13.5rem, 26vw, 18rem);
-  min-height: var(--delete-control-height);
-  gap: var(--space-xs);
-  padding: 0 0 0 0.58rem;
-  transform: translateY(-50%);
-  color: var(--danger-text);
-  background: #f5ddd8;
-  border: 1px solid var(--danger-border);
-  border-radius: 8px;
-  font-size: 0.82rem;
-}
-
-.delete-confirm[hidden] {
-  display: none;
-}
-
-.confirm-actions {
-  display: flex;
-  align-self: stretch;
-  gap: 0.32rem;
-  flex: 0 0 auto;
-}
-
-.confirm-cancel-btn {
-  border-color: var(--control-border);
-  background: var(--control-bg);
-  color: var(--muted);
 }
 
 .confirm-delete-btn {
@@ -999,7 +882,7 @@ input:focus-visible {
   --button-hover-border: #ad766e;
   --button-active-bg: #e5bdb7;
   --button-active-border: #9a655f;
-  width: var(--delete-button-width);
+  width: 4.4rem;
   border-color: var(--danger-border);
   background: #efd1cb;
   color: var(--danger-text);
@@ -1218,10 +1101,6 @@ input.edit-morph-target {
 .recurring-form.show-days-open {
   grid-template-columns: 0 minmax(11.5rem, 14rem) minmax(0, 1fr);
   gap: 0.6rem;
-}
-
-.recurring-form.recurring-form-measuring {
-  transition: none;
 }
 
 .recurring-form > select {
@@ -1736,26 +1615,6 @@ input::placeholder {
   animation: removeTask 170ms cubic-bezier(0.2, 0, 0.2, 1) forwards;
 }
 
-.task-item.recurring-complete-origin {
-  min-height: 0;
-  overflow: hidden;
-  pointer-events: none;
-  will-change: max-height, min-height, padding, margin, border-width, opacity;
-  animation: recurringCompleteOrigin 420ms cubic-bezier(0.22, 0.72, 0.2, 1) forwards;
-}
-
-.recurring-complete-flyer {
-  position: fixed;
-  z-index: 50;
-  margin: 0;
-  list-style: none;
-  pointer-events: none;
-  transform-origin: center;
-  will-change: transform, opacity;
-  box-shadow: 0 14px 30px rgba(55, 72, 54, 0.18);
-  animation: recurringCompleteFly 420ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-}
-
 .task-edit-flyer {
   position: fixed;
   z-index: 60;
@@ -1778,10 +1637,6 @@ input::placeholder {
   overflow-wrap: anywhere;
   word-break: break-word;
   will-change: left, top, width, height, color, font-size, line-height;
-}
-
-.recurring-panel-toggle.recurring-catch-pulse {
-  animation: recurringCatchPulse 180ms ease-out;
 }
 
 .task-item.dragging {
@@ -2016,52 +1871,6 @@ input::placeholder {
     max-height: 0;
     padding-bottom: 0;
     padding-top: 0;
-  }
-}
-
-@keyframes recurringCompleteFly {
-  from {
-    opacity: 0.88;
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-
-  to {
-    opacity: 0;
-    transform: translate3d(var(--recurring-complete-x), var(--recurring-complete-y), 0) scale(0.12);
-  }
-}
-
-@keyframes recurringCompleteOrigin {
-  from {
-    border-width: 1px;
-    margin-bottom: var(--task-exit-margin-bottom, 0px);
-    max-height: var(--task-exit-height);
-    opacity: 1;
-    padding-bottom: 0.48rem;
-    padding-top: 0.48rem;
-  }
-
-  42% {
-    opacity: 0.2;
-  }
-
-  to {
-    border-width: 0;
-    margin-bottom: 0;
-    max-height: 0;
-    opacity: 0;
-    padding-bottom: 0;
-    padding-top: 0;
-  }
-}
-
-@keyframes recurringCatchPulse {
-  from {
-    box-shadow: 0 0 0 0 rgba(166, 191, 63, 0.38);
-  }
-
-  to {
-    box-shadow: 0 0 0 0.42rem rgba(166, 191, 63, 0);
   }
 }
 
@@ -2406,15 +2215,8 @@ input::placeholder {
 .app.rj-mode .task-days-left,
 .app.rj-mode .task-action-btn,
 .recurring-summary-meta,
-.recurring-days-field legend,
-.progress-labels,
-.app.rj-mode .progress-labels {
+.recurring-days-field legend {
   color: var(--muted);
-}
-
-.progress-labels strong,
-.app.rj-mode .progress-labels strong {
-  color: var(--text);
 }
 
 .app.rj-mode .task-action-btn:hover {
@@ -2538,8 +2340,6 @@ input::placeholder {
   background-clip: content-box;
 }
 
-.rj-progress,
-.app.rj-mode .rj-progress,
 .settings-dialog,
 .recurring-panel-content {
   background: var(--panel);
@@ -2547,22 +2347,12 @@ input::placeholder {
   box-shadow: 0 18px 44px rgba(5, 12, 8, 0.24);
 }
 
-.progress-track {
-  background: var(--task-bg);
-  border-color: var(--control-border);
-}
-
-.progress-fill,
-.app.rj-mode .progress-fill {
-  background: var(--accent);
-}
 
 .settings-backdrop,
 .app.rj-mode .settings-backdrop {
   background: rgba(5, 12, 8, 0.66);
 }
 
-.list-delete-btn,
 .confirm-delete-btn {
   color: var(--danger-text);
   border-color: var(--danger-border);
@@ -2571,11 +2361,6 @@ input::placeholder {
 
 .confirm-delete-btn {
   background: var(--danger-bg);
-}
-
-.delete-confirm {
-  background: #f2dfda;
-  border-color: var(--danger-border);
 }
 
 .app.rj-mode {
@@ -2644,8 +2429,6 @@ input,
 .weekly-card,
 .persistent-card,
 .app.rj-mode .persistent-card,
-.rj-progress,
-.app.rj-mode .rj-progress,
 .settings-dialog,
 .recurring-panel-content,
 .app.rj-mode .recurring-panel-content,
@@ -2746,21 +2529,14 @@ button:not(:disabled):not(.settings-backdrop):active,
   opacity: 0.82;
 }
 
-.progress-track,
 .task-badge,
 .task-days-left,
 .recurring-summary-status,
 .app.rj-mode .recurring-summary-status,
-.delete-confirm,
 .confirm-delete-btn {
   color: var(--text);
   background: var(--accent-soft);
   border-color: rgba(244, 239, 216, 0.56);
-}
-
-.progress-fill,
-.app.rj-mode .progress-fill {
-  background: var(--text);
 }
 
 .reset-label,
@@ -2768,8 +2544,6 @@ button:not(:disabled):not(.settings-backdrop):active,
 .form-msg,
 .status-pill,
 .app.rj-mode .status-pill,
-.progress-labels,
-.app.rj-mode .progress-labels,
 .recurring-summary-meta,
 .app.rj-mode .recurring-summary-meta,
 .recurring-days-field legend,
@@ -2778,16 +2552,12 @@ button:not(:disabled):not(.settings-backdrop):active,
   color: var(--text);
 }
 
-.list-delete-btn,
-.confirm-delete-btn,
-.confirm-cancel-btn {
+.confirm-delete-btn {
   color: var(--text);
   border-color: var(--border);
 }
 
-.list-delete-btn:hover,
-.confirm-delete-btn:hover,
-.confirm-cancel-btn:hover {
+.confirm-delete-btn:hover {
   color: var(--text);
   background: var(--control-hover);
   border-color: var(--border);
@@ -2834,8 +2604,7 @@ input,
 .task-badge,
 .task-days-left,
 .recurring-summary-status,
-.day-chip span,
-.delete-confirm {
+.day-chip span {
   border-radius: 0;
   box-shadow: none;
 }
@@ -2999,15 +2768,9 @@ select {
   margin-top: 0.6rem;
 }
 
-.list-delete-btn,
-.confirm-cancel-btn,
 .confirm-delete-btn {
   border-color: var(--border);
   background: transparent;
-}
-
-.delete-confirm {
-  background: var(--bg);
 }
 
 .settings-dialog,
@@ -3029,10 +2792,6 @@ select {
 .task-days-left {
   background: transparent;
   border: 1px solid rgba(244, 239, 216, 0.6);
-}
-
-.progress-track {
-  border-radius: 0;
 }
 
 .app {
@@ -3094,6 +2853,213 @@ select {
   border: 1px solid currentColor;
 }
 
+/* Final list spacing and paired IRL layout refinements. */
+.app.rj-mode:not(.paired-rj) .persistent-card:not(.partner-rj-card) {
+  grid-column: 1 / -1;
+}
+
+.app.rj-mode .persistent-card .add-task-form {
+  margin-bottom: 0.32rem;
+}
+
+.app:not(.rj-mode) .todo-card > .form-msg:empty {
+  min-height: 0;
+  margin: 0;
+}
+
+/* Final paired-planner layout overrides. */
+.app.rj-mode .list-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: none;
+  gap: var(--space-lg);
+}
+
+.app.rj-mode .list-stack > .persistent-card {
+  grid-area: auto;
+  min-width: 0;
+}
+
+.app:not(.rj-mode) #lists-view:has(.partner-ms-section:not([hidden])) {
+  display: block;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+}
+
+.app:not(.rj-mode) #lists-view:has(.partner-ms-section:not([hidden])) > .list-stack,
+.partner-ms-list-stack {
+  height: min(38rem, calc(100dvh - 10rem));
+  min-height: 32rem;
+}
+
+@media (max-width: 700px) {
+  .app.rj-mode .list-stack {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(2, minmax(24rem, 1fr));
+    overflow-y: auto;
+  }
+}
+
+/* IRL composer sits outside the list frame and its option controls float above content. */
+.rj-composer[hidden] {
+  display: none;
+}
+
+.app.rj-mode .rj-composer {
+  position: relative;
+  z-index: 8;
+  width: 100%;
+  margin: 0 0 0.7rem;
+}
+
+.app.rj-mode .rj-composer > .add-task-form {
+  margin: 0;
+}
+
+.app.rj-mode .rj-composer .recurring-tools:not([hidden]) {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  display: block;
+  width: min(46rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0;
+  filter: drop-shadow(0 12px 24px rgba(38, 49, 38, 0.22));
+}
+
+.app.rj-mode .rj-composer .recurring-form {
+  width: 100%;
+  background: #f4f6ef;
+}
+
+.app.rj-mode .rj-composer > .form-msg {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin: 0.2rem 0 0;
+}
+
+/* MS uses document scrolling; cards and task lists no longer own scrollbars. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+body:not(.rj-mode),
+body:not(.rj-mode) .app:not(.rj-mode) {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+.app:not(.rj-mode) #lists-view,
+.app:not(.rj-mode) #lists-view:has(.partner-ms-section:not([hidden])) {
+  display: block;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
+.app:not(.rj-mode) .list-stack,
+.app:not(.rj-mode) #lists-view:has(.partner-ms-section:not([hidden])) > .list-stack,
+.app:not(.rj-mode) .partner-ms-list-stack {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  grid-template-rows: auto auto;
+  overflow: visible;
+}
+
+.app:not(.rj-mode) .todo-card,
+.app:not(.rj-mode) .task-list {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.app:not(.rj-mode) .task-list {
+  flex: 0 0 auto;
+  padding-right: 0;
+}
+
+.app:not(.rj-mode) .schedms-add-form,
+.app:not(.rj-mode) .schedms-add-form.editing-task {
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 700px) {
+  .app.rj-mode .rj-composer .recurring-form,
+  .app.rj-mode .rj-composer .recurring-form.show-days-open {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .app.rj-mode .rj-composer .recurring-form > select,
+  .app.rj-mode .rj-composer .recurring-days-field {
+    grid-column: 1;
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* Paired planners share each page; paired content is always read-only. */
+.app.rj-mode .list-stack {
+  grid-template-areas: none;
+  gap: var(--space-lg);
+}
+
+.app.rj-mode .list-stack > .persistent-card {
+  grid-area: auto;
+}
+
+.partner-ms-section[hidden] {
+  display: none;
+}
+
+.partner-ms-section {
+  width: 100%;
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.partner-ms-list-stack {
+  height: min(38rem, calc(100dvh - 10rem));
+  min-height: 32rem;
+}
+
+.partner-task-item,
+.partner-task-item * {
+  cursor: default;
+}
+
+.app:not(.rj-mode) #lists-view:has(.partner-ms-section:not([hidden])) {
+  display: block;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+}
+
+.app:not(.rj-mode) #lists-view:has(.partner-ms-section:not([hidden])) > .list-stack {
+  height: min(38rem, calc(100dvh - 10rem));
+  min-height: 32rem;
+}
+
+@media (max-width: 700px) {
+  .app.rj-mode .list-stack {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    overflow-y: auto;
+  }
+
+  .app.rj-mode:not(.paired-rj) .persistent-card:not(.partner-rj-card) {
+    grid-column: auto;
+  }
+}
+
 .settings-dialog-header h2::before {
   display: none;
 }
@@ -3132,15 +3098,6 @@ select {
   height: min(38rem, calc(100vh - 8rem));
   border: 1px solid var(--border);
   overflow: hidden;
-}
-
-.app.rj-mode .rj-progress {
-  margin: 0;
-  padding: 0.85rem 1.2rem;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  box-shadow: none;
 }
 
 .app.rj-mode .list-stack {
@@ -3285,18 +3242,6 @@ select {
   display: none;
 }
 
-.progress-track,
-.progress-fill,
-.app.rj-mode .progress-track,
-.app.rj-mode .progress-fill {
-  border-radius: 0;
-}
-
-.rj-progress,
-.app.rj-mode .rj-progress {
-  border-radius: 0;
-}
-
 .app.rj-mode .persistent-card .form-msg {
   min-height: 0.2rem;
   margin: 0 0 0.25rem;
@@ -3306,43 +3251,11 @@ select {
   margin-top: 0.4rem;
 }
 
-.list-delete-btn,
-.confirm-cancel-btn,
 .confirm-delete-btn,
 .task-action-btn {
   display: inline-grid;
   place-items: center;
   text-align: center;
-}
-
-.card-meta .list-delete-btn {
-  width: 2.15rem;
-  padding: 0;
-  font-size: 0;
-}
-
-.card-meta .list-delete-btn::before,
-.card-meta .list-delete-btn::after {
-  display: block;
-  content: "";
-}
-
-.card-meta .list-delete-btn::before {
-  width: 0.68rem;
-  height: 0.68rem;
-  border: 1px solid currentColor;
-  border-top: 0;
-  transform: translateY(0.08rem);
-}
-
-.card-meta .list-delete-btn::after {
-  position: absolute;
-  top: 0.52rem;
-  left: 50%;
-  width: 0.9rem;
-  height: 1px;
-  background: currentColor;
-  transform: translateX(-50%);
 }
 
 .task-action-btn {
@@ -3472,10 +3385,6 @@ select {
   .list-set-switch {
     flex: 1;
     min-width: 0;
-  }
-
-  .delete-confirm {
-    width: min(16rem, calc(100vw - 2rem));
   }
 
   .recurring-form {
@@ -3903,7 +3812,6 @@ select {
 }
 
 .todo-card,
-.rj-progress,
 .app.rj-mode .list-stack {
   position: relative;
   z-index: 1;
@@ -4425,77 +4333,6 @@ select option,
   background: transparent;
 }
 
-.planner-owner-switcher {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  max-width: 100%;
-  background: var(--panel);
-  border: 1px solid var(--border);
-}
-
-.planner-owner-switcher[hidden] {
-  display: none;
-}
-
-.planner-owner-switch {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.34rem;
-  min-width: 5rem;
-  min-height: 2.15rem;
-  max-width: 12rem;
-  padding: 0.28rem 0.7rem;
-  overflow: hidden;
-  border: 0;
-  border-left: 1px solid rgba(244, 239, 216, 0.5);
-  border-radius: 0;
-  color: var(--muted);
-  background: transparent;
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.planner-owner-switch:first-child {
-  border-left: 0;
-}
-
-.planner-owner-switch::before {
-  flex: 0 0 auto;
-  width: 0.38rem;
-  height: 0.38rem;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  content: "";
-  opacity: 0.72;
-}
-
-.planner-owner-switch[data-planner-owner="self"]::before {
-  background: currentColor;
-}
-
-.planner-owner-switch[data-planner-owner="partner"]::before {
-  box-shadow: 0.25rem 0 0 -0.12rem currentColor;
-}
-
-button.planner-owner-switch:not(:disabled):hover {
-  color: var(--text);
-  background: var(--control-hover);
-  border-color: rgba(244, 239, 216, 0.5);
-  box-shadow: none;
-}
-
-button.planner-owner-switch.active,
-button.planner-owner-switch.active:not(:disabled):hover {
-  color: var(--text);
-  background: var(--accent-soft);
-  border-color: rgba(244, 239, 216, 0.5);
-  box-shadow: none;
-}
-
 .pairing-controls {
   display: grid;
   gap: 0.6rem;
@@ -4667,10 +4504,6 @@ button.planner-owner-switch.active:not(:disabled):hover {
   font-weight: 700;
 }
 
-.app.partner-view .task-item {
-  cursor: default;
-}
-
 .task-priority-btn {
   display: inline-grid;
   place-items: center;
@@ -4734,15 +4567,6 @@ button.planner-owner-switch.active:not(:disabled):hover {
 
   .auth-user-label {
     max-width: min(100%, 14rem);
-  }
-
-  .planner-owner-switcher {
-    width: 100%;
-  }
-
-  .planner-owner-switch {
-    flex: 1;
-    min-width: 0;
   }
 
   .pairing-form {
@@ -4814,4 +4638,498 @@ button.planner-owner-switch.active:not(:disabled):hover {
   .custom-select.closing .custom-select-menu {
     animation: none;
   }
+}
+
+/* Keep these refinements after the theme's layered overrides. */
+.app.rj-mode .persistent-card .add-task-form {
+  margin-bottom: 0.32rem;
+}
+
+.app:not(.rj-mode) .todo-card > .form-msg:empty {
+  min-height: 0;
+  margin: 0;
+}
+
+.app.rj-mode .list-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: none;
+  gap: var(--space-lg);
+}
+
+.app.rj-mode .list-stack > .persistent-card {
+  grid-area: auto;
+  min-width: 0;
+}
+
+.app:not(.rj-mode) #lists-view:has(.partner-ms-section:not([hidden])) {
+  display: block;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+}
+
+.app:not(.rj-mode) #lists-view:has(.partner-ms-section:not([hidden])) > .list-stack,
+.partner-ms-list-stack {
+  height: min(38rem, calc(100dvh - 10rem));
+  min-height: 32rem;
+}
+
+@media (max-width: 700px) {
+  .app.rj-mode .list-stack {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(2, minmax(24rem, 1fr));
+    overflow-y: auto;
+  }
+}
+
+/* Final composer and page-scroll rules. */
+.rj-composer[hidden] {
+  display: none;
+}
+
+.app.rj-mode .rj-composer {
+  position: relative;
+  z-index: 8;
+  width: 100%;
+  margin: 0 0 0.7rem;
+}
+
+.app.rj-mode .rj-composer > .add-task-form {
+  margin: 0;
+}
+
+.app.rj-mode .rj-composer .recurring-tools:not([hidden]) {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  display: block;
+  width: min(46rem, calc(100vw - 2rem));
+  margin: 0;
+  filter: drop-shadow(0 12px 24px rgba(38, 49, 38, 0.22));
+}
+
+.app.rj-mode .rj-composer .recurring-form {
+  width: 100%;
+  background: #f4f6ef;
+}
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+body:not(.rj-mode),
+body:not(.rj-mode) .app:not(.rj-mode) {
+  height: auto;
+  min-height: 100dvh;
+  overflow-y: visible;
+}
+
+.app:not(.rj-mode) #lists-view,
+.app:not(.rj-mode) #lists-view:has(.partner-ms-section:not([hidden])) {
+  display: block;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
+.app:not(.rj-mode) .list-stack,
+.app:not(.rj-mode) #lists-view:has(.partner-ms-section:not([hidden])) > .list-stack,
+.app:not(.rj-mode) .partner-ms-list-stack {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  grid-template-rows: auto auto;
+  overflow: visible;
+}
+
+.app:not(.rj-mode) .todo-card,
+.app:not(.rj-mode) .task-list {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.app:not(.rj-mode) .task-list {
+  flex: 0 0 auto;
+  padding-right: 0;
+}
+
+.app:not(.rj-mode) .schedms-add-form,
+.app:not(.rj-mode) .schedms-add-form.editing-task {
+  width: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 700px) {
+  .app.rj-mode .rj-composer .recurring-form,
+  .app.rj-mode .rj-composer .recurring-form.show-days-open {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .app.rj-mode .rj-composer .recurring-form > select,
+  .app.rj-mode .rj-composer .recurring-days-field {
+    grid-column: 1;
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* The IRL composer is outside the framed lists; paired lists share a center rule. */
+.app.rj-mode #lists-view {
+  width: min(100%, 62rem);
+  height: auto;
+  min-height: 0;
+  border: 0;
+  overflow: visible;
+}
+
+.app.rj-mode .list-stack {
+  height: min(38rem, calc(100dvh - 11rem));
+  min-height: 26rem;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  gap: 0;
+}
+
+.app.rj-mode.paired-rj .partner-rj-card {
+  border-left: 1px solid var(--border);
+}
+
+/* Each MS planner keeps one fixed frame; only an overflowing individual list scrolls. */
+.app:not(.rj-mode) .list-stack,
+.app:not(.rj-mode) #lists-view:has(.partner-ms-section:not([hidden])) > .list-stack,
+.app:not(.rj-mode) .partner-ms-list-stack {
+  width: 100%;
+  height: min(38rem, calc(100dvh - 10rem));
+  min-height: 32rem;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.app:not(.rj-mode) .todo-card {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app:not(.rj-mode) .task-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+@media (max-width: 700px) {
+  .app.rj-mode .list-stack {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .app.rj-mode.paired-rj .partner-rj-card {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}
+
+/* IRL toolbar controls use the page palette; Scheduled Tasks floats from the Mine header. */
+.app.rj-mode .rj-composer .recurring-toggle-btn,
+.app.rj-mode .rj-composer .recurring-toggle-btn.active,
+.app.rj-mode .rj-composer .recurring-toggle-btn:hover {
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.app.rj-mode .rj-composer .recurring-toggle-btn:hover,
+.app.rj-mode .rj-composer .recurring-toggle-btn.active {
+  background: var(--control-hover);
+}
+
+.app.rj-mode .rj-composer .recurring-form {
+  color: var(--text);
+  background: var(--bg);
+  border-color: var(--border);
+}
+
+.app.rj-mode .persistent-card > .card-header {
+  position: relative;
+  z-index: 18;
+}
+
+.app.rj-mode .persistent-card > .card-header .recurring-panel:not([hidden]) {
+  position: relative;
+  align-self: center;
+  display: block;
+  width: 2.45rem;
+  flex: 0 0 2.45rem;
+  margin: 0;
+}
+
+.app.rj-mode .persistent-card > .card-header .recurring-panel-content {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  left: auto;
+  width: min(22rem, calc(100vw - 2rem));
+  max-height: min(24rem, calc(100dvh - 10rem));
+  overflow-y: auto;
+  background: var(--bg);
+  box-shadow: 0 14px 30px rgba(38, 49, 38, 0.28);
+}
+
+.app.rj-mode .rj-composer .recurring-form {
+  min-height: 4.4rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+}
+
+.app.rj-mode .persistent-card > .card-header .recurring-panel:not([hidden]) {
+  width: 0.78rem;
+  flex-basis: 0.78rem;
+}
+
+.app.rj-mode .persistent-card > .card-header .recurring-panel-toggle {
+  width: 0.78rem;
+  min-height: 0.78rem;
+  height: 0.78rem;
+  padding: 0;
+  border: 0;
+  font-size: 0.65rem;
+}
+
+.app.rj-mode .partner-recurring-panel-content {
+  display: block;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.25rem);
+  transition: opacity 140ms ease, transform 140ms ease, visibility 0s linear 140ms;
+}
+
+.app.rj-mode .partner-recurring-panel:hover .partner-recurring-panel-content,
+.app.rj-mode .partner-recurring-panel:focus-within .partner-recurring-panel-content {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+
+/* Pinned Task Options and half-width paired composer. */
+.app.rj-mode.paired-rj .rj-composer {
+  width: 50%;
+  padding-right: 0;
+  box-sizing: border-box;
+}
+
+.app.rj-mode .rj-composer .add-task-submit-btn,
+.app.rj-mode .rj-composer .recurring-toggle-btn {
+  flex: 0 0 2.45rem;
+  width: 2.45rem;
+  min-width: 2.45rem;
+  min-height: 2.45rem;
+  height: 2.45rem;
+  padding: 0;
+}
+
+.app.rj-mode .rj-composer .recurring-tools:not([hidden]) {
+  top: calc(100% + 0.7rem);
+  right: auto;
+  left: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.app.rj-mode .rj-composer .recurring-form,
+.app.rj-mode .rj-composer .recurring-form.show-days-open {
+  min-height: 7rem;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.app.rj-mode .rj-composer .recurring-form > select,
+.app.rj-mode .rj-composer .recurring-form.show-days-open > select,
+.app.rj-mode .rj-composer .recurring-days-field,
+.app.rj-mode .rj-composer .recurring-form.show-days-open .recurring-days-field {
+  grid-column: 1;
+  width: 100%;
+  max-width: none;
+}
+
+@media (max-width: 700px) {
+  .app.rj-mode.paired-rj .rj-composer {
+    width: 100%;
+    padding-right: 0;
+  }
+}
+
+/* Keep the Task Options icon centered and all popup content inside its frame. */
+.app.rj-mode .rj-composer .recurring-toggle-btn {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.app.rj-mode .rj-composer .recurring-toggle-btn > span {
+  display: block;
+  margin: 0;
+  line-height: 1;
+  transform: none;
+}
+
+.app.rj-mode .rj-composer .recurring-tools,
+.app.rj-mode .rj-composer .recurring-form,
+.app.rj-mode .rj-composer .recurring-form.show-days-open {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app.rj-mode .rj-composer .recurring-form,
+.app.rj-mode .rj-composer .recurring-form.show-days-open {
+  height: auto;
+  max-height: none;
+  overflow: hidden;
+  align-items: stretch;
+}
+
+.app.rj-mode .rj-composer .recurring-form .recurring-days-field,
+.app.rj-mode .rj-composer .recurring-form.show-days-open .recurring-days-field {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.app.rj-mode .rj-composer .recurring-form.show-days-open .recurring-days-field {
+  max-height: 12rem;
+}
+
+.app.rj-mode .rj-composer .day-picker {
+  box-sizing: border-box;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  width: 100%;
+}
+
+.app.rj-mode .rj-composer .recurring-form > .custom-select,
+.app.rj-mode .rj-composer .recurring-form.show-days-open > .custom-select {
+  position: relative;
+  grid-column: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.app.rj-mode .rj-composer .recurring-form .custom-select-menu {
+  position: relative;
+  inset: auto;
+  z-index: 1;
+  width: 100%;
+  margin-top: 0.18rem;
+}
+
+/* Click-only Task Options: synchronize dropdown and popup reflow at 84ms. */
+.app.rj-mode .rj-composer .recurring-form .custom-select-menu {
+  max-height: 0;
+  margin-top: 0;
+  overflow: hidden;
+  transition: max-height 84ms ease-out, margin-top 84ms ease-out;
+}
+
+.app.rj-mode .rj-composer .recurring-form .custom-select.open .custom-select-menu {
+  max-height: 10rem;
+  margin-top: 0.18rem;
+  animation: dropdownExpandDown 84ms ease-out both;
+}
+
+.app.rj-mode .rj-composer .recurring-form .custom-select.closing .custom-select-menu {
+  max-height: 0;
+  margin-top: 0;
+  animation: dropdownCollapseUp 84ms ease-in both;
+}
+
+.app.rj-mode .rj-composer .recurring-form,
+.app.rj-mode .rj-composer .recurring-form.show-days-open,
+.app.rj-mode .rj-composer .recurring-days-field {
+  transition-duration: 84ms;
+}
+
+/* Fill each title-sized Scheduled Tasks button with a matching-size symbol. */
+.app.rj-mode .persistent-card > .card-header .recurring-panel-toggle-copy {
+  display: grid;
+  place-items: center;
+  width: 0.78rem;
+  height: 0.78rem;
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 0.78rem;
+  transform: none;
+}
+
+/* Keep the paired Scheduled Tasks popup connected to its hover target. */
+.app.rj-mode .partner-recurring-panel-content {
+  top: 100%;
+}
+
+/* MS owner labels live inside each To-Do header. */
+.ms-owner-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.55rem;
+  padding: 0.18rem 0.55rem;
+  color: var(--text);
+  background: var(--control-hover);
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.ms-owner-label[hidden] {
+  display: none;
+}
+
+.app:not(.rj-mode) .partner-ms-section {
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* MS owner strip sits inside the outer frame, above the three list regions. */
+.app:not(.rj-mode) .list-stack {
+  position: relative;
+  padding-top: 2.35rem;
+  box-sizing: border-box;
+}
+
+.app:not(.rj-mode) .list-stack > .ms-owner-label {
+  position: absolute;
+  top: 0.48rem;
+  left: 0.7rem;
+  z-index: 5;
+}
+
+.app:not(.rj-mode) .partner-ms-section {
+  margin-top: 2.5rem;
+}
+
+/* Explicit shared hover state keeps the paired popup open under the pointer. */
+.app.rj-mode .partner-recurring-panel.hover-open .partner-recurring-panel-content {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition-delay: 0s;
 }

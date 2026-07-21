@@ -50,10 +50,6 @@
             <button class="list-set-switch active" type="button" data-list-set="rj">IRL</button>
             <button class="list-set-switch" type="button" data-list-set="schedms">MS</button>
           </div>
-          <div id="planner-owner-switcher" class="planner-owner-switcher" role="group" aria-label="Planner owner" hidden>
-            <button class="planner-owner-switch active" type="button" data-planner-owner="self">Mine</button>
-            <button id="partner-owner-switch" class="planner-owner-switch" type="button" data-planner-owner="partner">Partner</button>
-          </div>
         </div>
         <div class="pixel-party" aria-hidden="true">
           <span class="pixel-character pixel-character-scout">
@@ -77,20 +73,10 @@
       </header>
 
       <section id="lists-view" hidden>
-        <section class="rj-progress" aria-label="IRL completion progress" hidden>
-          <div class="progress-labels">
-            <span>0%</span>
-            <strong id="rj-progress-label">0%</strong>
-            <span>100%</span>
-          </div>
-          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-            <div id="rj-progress-fill" class="progress-fill"></div>
-          </div>
-        </section>
         <section id="schedms-quick-add" class="schedms-quick-add" aria-label="Add MS task">
-          <form id="schedms-add-form" class="schedms-add-form">
+          <form id="schedms-add-form" class="schedms-add-form" autocomplete="off">
             <label class="sr-only" for="schedms-input">Add MS task</label>
-            <input id="schedms-input" type="text" maxlength="100" placeholder="Add task" required />
+            <input id="schedms-input" type="text" maxlength="100" placeholder="Add task" autocomplete="off" required />
             <label class="sr-only" for="schedms-target-list">Choose list</label>
             <select id="schedms-target-list" aria-label="Choose list">
               <option value="persistent">To-Do</option>
@@ -111,7 +97,33 @@
           </form>
           <p id="schedms-add-error" class="form-msg" role="alert"></p>
         </section>
+        <section id="rj-composer" class="rj-composer" aria-label="Add IRL task" hidden>
+          <form class="add-task-form" data-list="persistent" autocomplete="off">
+            <label class="sr-only" for="persistent-input">Add to-do task</label>
+            <input id="persistent-input" type="text" maxlength="100" placeholder="Add to-do item" autocomplete="off" required />
+            <button class="add-task-submit-btn" type="submit" aria-label="Add to-do task" title="Add task"></button>
+            <button class="edit-cancel-btn" type="button" data-cancel-edit="persistent" aria-label="Cancel edit" title="Cancel edit" hidden>&times;</button>
+            <button id="recurring-toggle-btn" class="recurring-toggle-btn" type="button" aria-expanded="false" aria-controls="recurring-form" aria-label="Task options" title="Task options">
+              <span aria-hidden="true">&#8943;</span><span class="sr-only">Task options</span>
+            </button>
+          </form>
+          <div id="recurring-tools" class="recurring-tools" hidden>
+            <div id="recurring-form" class="recurring-form" hidden>
+              <label class="sr-only" for="recurring-interval">Task option</label>
+              <select id="recurring-interval" aria-label="Task option">
+                <option value="one-time">One-time</option><option value="1">Daily</option><option value="7">Weekly</option>
+              </select>
+              <fieldset class="recurring-days-field">
+                <legend>Show on</legend>
+                <div id="recurring-show-days" class="day-picker" aria-label="Show recurring task on days"></div>
+              </fieldset>
+            </div>
+          </div>
+          <p id="recurring-error" class="form-msg recurring-msg" role="alert"></p>
+          <p id="persistent-error" class="form-msg" role="alert"></p>
+        </section>
         <div class="list-stack">
+          <span id="mine-ms-title" class="ms-owner-label" hidden>Mine</span>
           <section class="todo-card daily-card" data-list="daily">
             <div class="card-header">
               <h2>Daily</h2>
@@ -154,76 +166,62 @@
 
           <section class="todo-card persistent-card" data-list="persistent">
             <div class="card-header">
-              <h2>To-Do</h2>
-            </div>
-            <form class="add-task-form" data-list="persistent">
-              <label class="sr-only" for="persistent-input">Add to-do task</label>
-              <input id="persistent-input" type="text" maxlength="100" placeholder="Add to-do item" required />
-              <button class="add-task-submit-btn" type="submit" aria-label="Add to-do task" title="Add task"></button>
-              <button
-                class="edit-cancel-btn"
-                type="button"
-                data-cancel-edit="persistent"
-                aria-label="Cancel edit"
-                title="Cancel edit"
-                hidden
-              >
-                &times;
-              </button>
-              <button
-                id="recurring-toggle-btn"
-                class="recurring-toggle-btn"
-                type="button"
-                aria-expanded="false"
-                aria-controls="recurring-form"
-                aria-label="Task options"
-                title="Task options"
-              >
-                <span aria-hidden="true">&#8943;</span>
-                <span class="sr-only">Task options</span>
-              </button>
+              <h2 id="persistent-list-title">To-Do</h2>
               <aside id="recurring-panel" class="recurring-panel" aria-label="Scheduled tasks" hidden>
-                <button
-                  id="recurring-panel-toggle"
-                  class="recurring-panel-toggle"
-                  type="button"
-                  aria-expanded="false"
-                  aria-controls="recurring-panel-content"
-                  aria-label="Scheduled tasks"
-                  title="Scheduled tasks"
-                >
-                  <span class="recurring-panel-toggle-copy" aria-hidden="true">&#9719;</span>
-                  <span id="recurring-panel-count" class="sr-only">0</span>
+                <button id="recurring-panel-toggle" class="recurring-panel-toggle" type="button" aria-expanded="false" aria-controls="recurring-panel-content" aria-label="Show recurring tasks" title="Show recurring tasks">
+                  <span class="recurring-panel-toggle-copy" aria-hidden="true">&#9719;</span><span id="recurring-panel-count" class="sr-only">0</span>
                 </button>
                 <section id="recurring-panel-content" class="recurring-panel-content" hidden>
-                  <div class="recurring-panel-header">
-                    <h2>Scheduled</h2>
-                  </div>
+                  <div class="recurring-panel-header"><h2>Scheduled</h2></div>
                   <ul id="recurring-panel-list" class="recurring-panel-list"></ul>
                   <p id="recurring-panel-empty" class="empty-msg">No scheduled tasks</p>
                 </section>
               </aside>
-            </form>
-            <div id="recurring-tools" class="recurring-tools" hidden>
-              <div id="recurring-form" class="recurring-form" hidden>
-                <label class="sr-only" for="recurring-interval">Task option</label>
-                <select id="recurring-interval" aria-label="Task option">
-                  <option value="one-time">One-time</option>
-                  <option value="1">Daily</option>
-                  <option value="7">Weekly</option>
-                </select>
-                <fieldset class="recurring-days-field">
-                  <legend>Show on</legend>
-                  <div id="recurring-show-days" class="day-picker" aria-label="Show recurring task on days"></div>
-                </fieldset>
-              </div>
             </div>
-            <p id="recurring-error" class="form-msg recurring-msg" role="alert"></p>
-            <p id="persistent-error" class="form-msg" role="alert"></p>
             <ul id="persistent-list" class="task-list"></ul>
             <p id="persistent-empty" class="empty-msg">No tasks</p>
           </section>
+          <section id="partner-rj-card" class="todo-card persistent-card partner-rj-card" aria-labelledby="partner-rj-title" hidden>
+            <div class="card-header">
+              <h2 id="partner-rj-title">Partner</h2>
+              <aside id="partner-recurring-panel" class="recurring-panel partner-recurring-panel" aria-label="Paired user's scheduled tasks" hidden>
+                <button class="recurring-panel-toggle" type="button" aria-label="Show recurring tasks" title="Show recurring tasks">
+                  <span class="recurring-panel-toggle-copy" aria-hidden="true">&#9719;</span>
+                  <span id="partner-recurring-panel-count" class="sr-only">0</span>
+                </button>
+                <section class="recurring-panel-content partner-recurring-panel-content">
+                  <div class="recurring-panel-header"><h2>Scheduled</h2></div>
+                  <ul id="partner-recurring-panel-list" class="recurring-panel-list"></ul>
+                  <p id="partner-recurring-panel-empty" class="empty-msg">No scheduled tasks</p>
+                </section>
+              </aside>
+            </div>
+            <ul id="partner-rj-list" class="task-list" aria-label="Partner's IRL list"></ul>
+            <p id="partner-rj-empty" class="empty-msg">No tasks</p>
+          </section>
         </div>
+        <section id="partner-ms-section" class="partner-ms-section" aria-label="Paired user's MS lists" hidden>
+          <div class="list-stack partner-ms-list-stack">
+            <span id="partner-ms-title" class="ms-owner-label">Partner</span>
+            <section class="todo-card persistent-card">
+              <div class="card-header">
+                <h2>To-Do</h2>
+              </div>
+              <ul id="partner-ms-persistent-list" class="task-list"></ul>
+              <p id="partner-ms-persistent-empty" class="empty-msg">No tasks</p>
+            </section>
+            <section class="todo-card daily-card">
+              <div class="card-header"><h2>Daily</h2></div>
+              <ul id="partner-ms-daily-list" class="task-list"></ul>
+              <p id="partner-ms-daily-empty" class="empty-msg">No tasks</p>
+            </section>
+            <section class="todo-card weekly-card">
+              <div class="card-header"><h2>Weekly</h2></div>
+              <ul id="partner-ms-weekly-list" class="task-list"></ul>
+              <p id="partner-ms-weekly-empty" class="empty-msg">No tasks</p>
+            </section>
+          </div>
+        </section>
       </section>
 
       <div id="settings-modal" class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
@@ -240,7 +238,7 @@
           </div>
           <div class="option-row pairing-option">
             <label>Pair account</label>
-            <div id="pairing-controls" class="pairing-controls">
+            <div class="pairing-controls">
               <form id="pairing-form" class="pairing-form">
                 <label class="sr-only" for="pairing-email">Partner email</label>
                 <input id="pairing-email" type="email" autocomplete="email" placeholder="Registered email" required />
