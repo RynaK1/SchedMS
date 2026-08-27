@@ -5353,3 +5353,8 @@ body:not(.rj-mode) .app:not(.rj-mode) {
     max-height: calc(100dvh - 1.25rem);
   }
 }
+
+/* The hidden attribute always wins over mode and responsive layout rules. */
+[hidden] {
+  display: none !important;
+}
