@@ -1655,12 +1655,7 @@ input::placeholder {
 }
 
 .task-main input[type="checkbox"] {
-  width: 1rem;
-  height: 1rem;
-  min-height: 0;
-  margin: 0;
-  accent-color: var(--accent);
-  flex: 0 0 auto;
+  display: none;
 }
 
 .task-copy {
@@ -4683,6 +4678,76 @@ select option,
   }
 }
 
+@media (max-width: 560px) {
+  .app,
+  .app.rj-mode {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .app-header {
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .header-controls,
+  .header-session {
+    flex-wrap: wrap;
+  }
+
+  .header-session {
+    justify-content: space-between;
+  }
+
+  #lists-view,
+  .app.rj-mode #lists-view {
+    display: block;
+    flex: none;
+    overflow: visible;
+  }
+
+  .app.rj-mode .list-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    overflow: visible;
+  }
+
+  .app.rj-mode .list-stack > .todo-card {
+    flex: none;
+    min-height: 0;
+  }
+
+  .app.rj-mode .task-list {
+    overflow: visible;
+  }
+
+  .app.rj-mode .rj-composer {
+    margin-bottom: 0.35rem;
+  }
+
+  .app.rj-mode .rj-composer > .add-task-form {
+    gap: 0.45rem;
+  }
+
+  .app.rj-mode .rj-composer > .add-task-form input {
+    flex-basis: calc(100% - 3.15rem);
+  }
+
+  .app.rj-mode .persistent-card .add-task-form {
+    flex-wrap: wrap;
+  }
+
+  .app.rj-mode .persistent-card .add-task-form input {
+    flex-basis: calc(100% - 3.15rem);
+  }
+
+  .app.rj-mode .persistent-card .recurring-panel:not([hidden]) {
+    margin-left: 0;
+  }
+}
+
 /* Final composer and page-scroll rules. */
 .rj-composer[hidden] {
   display: none;
@@ -5134,4 +5199,157 @@ body:not(.rj-mode) .app:not(.rj-mode) {
   pointer-events: auto;
   transform: translateY(0);
   transition-delay: 0s;
+}
+
+/* Compact task alignment and portrait-phone layout. */
+.task-item {
+  gap: 0.4rem;
+}
+
+.task-priority-btn {
+  width: 1.8rem;
+  margin-left: 0;
+}
+
+@media (max-width: 600px) and (orientation: portrait) {
+  html,
+  body {
+    min-width: 0;
+    min-height: 100%;
+  }
+
+  .app,
+  .app.rj-mode {
+    width: 100%;
+    height: auto;
+    min-height: 100dvh;
+    gap: 0.75rem;
+    padding: max(0.75rem, env(safe-area-inset-top)) max(0.65rem, env(safe-area-inset-right))
+      max(1.25rem, env(safe-area-inset-bottom)) max(0.65rem, env(safe-area-inset-left));
+    overflow: visible;
+  }
+
+  .app-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+
+  .header-controls,
+  .header-session {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .header-controls {
+    gap: 0.5rem;
+  }
+
+  .header-session {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.45rem 0.6rem;
+  }
+
+  .auth-user-label {
+    max-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .status-pill {
+    grid-column: 1 / -1;
+    width: 100%;
+    text-align: center;
+  }
+
+  .pixel-party {
+    display: none;
+  }
+
+  #lists-view,
+  .app.rj-mode #lists-view,
+  .app:not(.rj-mode) #lists-view {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    margin-bottom: 1.5rem;
+    overflow: visible;
+  }
+
+  .app.rj-mode .list-stack,
+  .app:not(.rj-mode) .list-stack,
+  .app:not(.rj-mode) #lists-view:has(.partner-ms-section:not([hidden])) > .list-stack,
+  .app:not(.rj-mode) .partner-ms-list-stack {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    gap: 0;
+    overflow: visible;
+  }
+
+  .todo-card,
+  .app.rj-mode .list-stack > .todo-card,
+  .app:not(.rj-mode) .todo-card {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .app:not(.rj-mode) .task-list,
+  .app.rj-mode .task-list {
+    max-height: 18rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .schedms-quick-add,
+  .rj-composer {
+    width: 100%;
+  }
+
+  .schedms-add-form,
+  .schedms-add-form.editing-task {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) 2.45rem;
+  }
+
+  .task-item,
+  .daily-card .task-item,
+  .weekly-card .task-item,
+  .persistent-card .task-item {
+    gap: 0.28rem;
+    min-width: 0;
+    padding-right: 0.2rem;
+  }
+
+  .task-priority-btn {
+    width: 1.65rem;
+  }
+
+  .task-main {
+    min-width: 0;
+  }
+
+  .task-copy {
+    font-size: 0.94rem;
+  }
+
+  .task-actions {
+    flex: 0 0 auto;
+    gap: 0.2rem;
+    padding-left: 0.15rem;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .settings-dialog {
+    width: calc(100vw - 1.25rem);
+    max-height: calc(100dvh - 1.25rem);
+  }
 }
