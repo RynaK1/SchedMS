@@ -1922,6 +1922,13 @@ function renderList(listType) {
     const actions = document.createElement("div");
     actions.className = "task-actions";
 
+    const actionsToggleBtn = document.createElement("button");
+    actionsToggleBtn.type = "button";
+    actionsToggleBtn.className = "task-action-btn task-actions-toggle";
+    actionsToggleBtn.setAttribute("aria-label", `Show actions for: ${task.text}`);
+    actionsToggleBtn.setAttribute("aria-expanded", "false");
+    actionsToggleBtn.textContent = "\u22ef";
+
     const editBtn = document.createElement("button");
     editBtn.type = "button";
     editBtn.className = "task-action-btn edit-btn";
@@ -1945,7 +1952,7 @@ function renderList(listType) {
     deleteBtn.appendChild(trashIcon);
 
     if (!isReadOnly) {
-      actions.append(editBtn, deleteBtn);
+      actions.append(actionsToggleBtn, editBtn, deleteBtn);
     }
 
     if (isReadOnly || isTaskEditing) {
@@ -1953,11 +1960,20 @@ function renderList(listType) {
       priorityBtn.disabled = true;
       editBtn.disabled = true;
       deleteBtn.disabled = true;
+      actionsToggleBtn.disabled = true;
     }
 
     let taskActionStarted = false;
     let taskPointerStart = null;
     let priorityToggleStarted = false;
+
+    actionsToggleBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const isOpen = li.classList.toggle("actions-open");
+      actionsToggleBtn.setAttribute("aria-expanded", String(isOpen));
+      actionsToggleBtn.setAttribute("aria-label", `${isOpen ? "Hide" : "Show"} actions for: ${task.text}`);
+    });
 
     const togglePriority = () => {
       if (isReadOnlyView() || priorityBtn.disabled || priorityToggleStarted) {

@@ -5211,6 +5211,10 @@ body:not(.rj-mode) .app:not(.rj-mode) {
   margin-left: 0;
 }
 
+.task-actions-toggle {
+  display: none;
+}
+
 @media (max-width: 600px) and (orientation: portrait) {
   html,
   body {
@@ -5351,6 +5355,29 @@ body:not(.rj-mode) .app:not(.rj-mode) {
   .settings-dialog {
     width: calc(100vw - 1.25rem);
     max-height: calc(100dvh - 1.25rem);
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .task-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .task-actions-toggle {
+    display: inline-grid;
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+
+  .task-actions > .edit-btn,
+  .task-actions > .delete-btn {
+    display: none;
+  }
+
+  .task-item.actions-open .task-actions > .edit-btn,
+  .task-item.actions-open .task-actions > .delete-btn {
+    display: inline-grid;
   }
 }
 
