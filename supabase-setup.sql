@@ -24,14 +24,22 @@ create table if not exists public.planner_pairings (
   constraint planner_pairings_unique_direction unique (requester_id, recipient_id)
 );
 
+create table if not exists public.planner_shared_states (
+  pairing_id uuid primary key references public.planner_pairings(id) on delete cascade,
+  data jsonb not null default '{"lastSavedAt":"","tasks":{"todo":[],"schedule":[]}}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
 alter table public.planner_states enable row level security;
 alter table public.planner_profiles enable row level security;
 alter table public.planner_pairings enable row level security;
+alter table public.planner_shared_states enable row level security;
 
 grant usage on schema public to authenticated;
 grant select, insert, update on public.planner_states to authenticated;
 grant select, insert, update on public.planner_profiles to authenticated;
 grant select on public.planner_pairings to authenticated;
+grant select, insert, update on public.planner_shared_states to authenticated;
 
 drop policy if exists "Planner state is readable by owner" on public.planner_states;
 drop policy if exists "Planner state is insertable by owner" on public.planner_states;
@@ -40,6 +48,9 @@ drop policy if exists "Planner profile is readable by owner or linked user" on p
 drop policy if exists "Planner profile is insertable by owner" on public.planner_profiles;
 drop policy if exists "Planner profile is updatable by owner" on public.planner_profiles;
 drop policy if exists "Planner pairings are readable by participants" on public.planner_pairings;
+drop policy if exists "Shared planner state is readable by paired participants" on public.planner_shared_states;
+drop policy if exists "Shared planner state is insertable by paired participants" on public.planner_shared_states;
+drop policy if exists "Shared planner state is updatable by paired participants" on public.planner_shared_states;
 
 create policy "Planner state is readable by owner"
 on public.planner_states
@@ -114,6 +125,57 @@ to authenticated
 using (
   auth.uid() is not null
   and (auth.uid() = requester_id or auth.uid() = recipient_id)
+);
+
+create policy "Shared planner state is readable by paired participants"
+on public.planner_shared_states
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.planner_pairings pairing
+    where pairing.id = pairing_id
+      and pairing.status = 'accepted'
+      and auth.uid() in (pairing.requester_id, pairing.recipient_id)
+  )
+);
+
+create policy "Shared planner state is insertable by paired participants"
+on public.planner_shared_states
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.planner_pairings pairing
+    where pairing.id = pairing_id
+      and pairing.status = 'accepted'
+      and auth.uid() in (pairing.requester_id, pairing.recipient_id)
+  )
+);
+
+create policy "Shared planner state is updatable by paired participants"
+on public.planner_shared_states
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.planner_pairings pairing
+    where pairing.id = pairing_id
+      and pairing.status = 'accepted'
+      and auth.uid() in (pairing.requester_id, pairing.recipient_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.planner_pairings pairing
+    where pairing.id = pairing_id
+      and pairing.status = 'accepted'
+      and auth.uid() in (pairing.requester_id, pairing.recipient_id)
+  )
 );
 
 create or replace function public.invite_planner_pair(target_email text)

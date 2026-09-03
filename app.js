@@ -6,6 +6,7 @@ const SUPABASE_CLIENT_FALLBACK_MODULE_URL = "https://cdn.jsdelivr.net/npm/@supab
 const SUPABASE_STATE_TABLE = "planner_states";
 const SUPABASE_PROFILE_TABLE = "planner_profiles";
 const SUPABASE_PAIRING_TABLE = "planner_pairings";
+const SUPABASE_SHARED_STATE_TABLE = "planner_shared_states";
 const AUTH_MIGRATION_KEY = `${STORAGE_KEY}-auth-migrated-user`;
 const LIST_TYPES = ["daily", "weekly", "persistent"];
 const LIST_SET_IDS = ["schedms", "rj"];
@@ -19,6 +20,8 @@ const RJ_TASK_GROUPS = ["recurring-open", "one-time-open", "done"];
 const RJ_TASK_OPTION_ONE_TIME = "one-time";
 const RJ_TASK_OPTION_DAILY = "daily";
 const RJ_TASK_OPTION_WEEKLY = "weekly";
+const RJ_LIST_KIND_TODO = "todo";
+const RJ_LIST_KIND_SCHEDULE = "schedule";
 const ADD_TASK_SYMBOL = "";
 const SAVE_TASK_SYMBOL = "✓";
 const DEFAULT_TIMEZONE_OFFSET = "-08:00";
@@ -30,7 +33,6 @@ const RECURRING_PANEL_CLOSE_DELAY_MS = 180;
 const RECURRING_FORM_MOTION_MS = 260;
 const CUSTOM_SELECT_CLOSE_MS = 84;
 const EDIT_TASK_MOTION_MS = 420;
-const EDIT_CANCEL_MOTION_MS = 220;
 const ADD_TASK_PLACEHOLDERS = {
   daily: "Add something for today",
   weekly: "Add weekly focus",
@@ -101,6 +103,16 @@ function createDefaultListSetState() {
   };
 }
 
+function createDefaultSharedRjState() {
+  return {
+    lastSavedAt: "",
+    tasks: {
+      todo: [],
+      schedule: [],
+    },
+  };
+}
+
 function getActiveListSet() {
   return state.listSets[state.activeListSet];
 }
@@ -155,6 +167,9 @@ let partnerRecurringHoverCloseTimer = null;
 let recurringCreateMode = false;
 let recurringFormPinned = false;
 let recurringFormCloseTimer = null;
+let rjComposerOwner = "mine";
+let openRjSchedulePanel = null;
+let rjSchedulePanelCloseTimer = null;
 let completionAudioContext = null;
 let openCustomSelect = null;
 let supabaseClient = null;
@@ -169,6 +184,12 @@ let authMode = "sign-in";
 let pendingLegacyMigrationUserId = "";
 let selfState = state;
 let partnerState = null;
+let sharedRjState = createDefaultSharedRjState();
+let sharedRjPairingId = "";
+let sharedRjSyncPending = false;
+let sharedRjSyncInFlight = false;
+let sharedRjRemoteAvailable = true;
+let sharedRjRemoteNotice = "";
 let pairingContext = {
   accepted: null,
   incoming: null,
@@ -177,7 +198,6 @@ let pairingContext = {
 };
 let pairingRefreshInFlight = false;
 const pendingAppendAnimations = new Set();
-const editCancelHideTimers = new Map();
 
 const els = {
   app: document.querySelector(".app"),
@@ -239,6 +259,29 @@ const els = {
   partnerRecurringPanelList: document.getElementById("partner-recurring-panel-list"),
   partnerRecurringPanelEmpty: document.getElementById("partner-recurring-panel-empty"),
   rjComposer: document.getElementById("rj-composer"),
+  rjTargetButtons: document.querySelectorAll(".rj-target-btn"),
+  rjOwnerToggle: document.getElementById("rj-owner-toggle"),
+  rjOnlyElements: document.querySelectorAll(".rj-only"),
+  mineRjScheduleCard: document.getElementById("mine-rj-schedule-card"),
+  mineRjScheduleList: document.getElementById("mine-rj-schedule-list"),
+  mineRjScheduleEmpty: document.getElementById("mine-rj-schedule-empty"),
+  sharedRjTodoCard: document.getElementById("shared-rj-todo-card"),
+  sharedRjTodoList: document.getElementById("shared-rj-todo-list"),
+  sharedRjTodoEmpty: document.getElementById("shared-rj-todo-empty"),
+  sharedRjScheduleCard: document.getElementById("shared-rj-schedule-card"),
+  sharedRjScheduleList: document.getElementById("shared-rj-schedule-list"),
+  sharedRjScheduleEmpty: document.getElementById("shared-rj-schedule-empty"),
+  sharedRjColumnHeader: document.getElementById("shared-rj-column-header"),
+  partnerRjColumnHeader: document.getElementById("partner-rj-column-header"),
+  partnerRjColumnTitle: document.getElementById("partner-rj-column-title"),
+  sharedRecurringPanel: document.getElementById("shared-recurring-panel"),
+  sharedRecurringPanelCount: document.getElementById("shared-recurring-panel-count"),
+  sharedRecurringPanelList: document.getElementById("shared-recurring-panel-list"),
+  sharedRecurringPanelEmpty: document.getElementById("shared-recurring-panel-empty"),
+  partnerRjScheduleCard: document.getElementById("partner-rj-schedule-card"),
+  partnerRjScheduleTitle: document.getElementById("partner-rj-schedule-title"),
+  partnerRjScheduleList: document.getElementById("partner-rj-schedule-list"),
+  partnerRjScheduleEmpty: document.getElementById("partner-rj-schedule-empty"),
   mineMsTitle: document.getElementById("mine-ms-title"),
   partnerMsSection: document.getElementById("partner-ms-section"),
   partnerMsTitle: document.getElementById("partner-ms-title"),
@@ -273,8 +316,8 @@ const els = {
   recurringPanelList: document.getElementById("recurring-panel-list"),
   recurringPanelEmpty: document.getElementById("recurring-panel-empty"),
   recurringPanelCount: document.getElementById("recurring-panel-count"),
+  rjSchedulePanels: document.querySelectorAll(".rj-schedule-panel"),
   listSetButtons: document.querySelectorAll(".list-set-switch"),
-  cancelEditButtons: document.querySelectorAll("[data-cancel-edit]"),
   addForms: document.querySelectorAll(".add-task-form"),
   lists: {
     daily: {
@@ -402,6 +445,14 @@ function wireEvents() {
     if (event.key === "Escape" && !els.settingsModal.hidden) {
       closeSettingsModal();
     }
+
+    if (event.key === "Escape" && editState) {
+      cancelTaskEdit();
+    }
+
+    if (event.key === "Escape" && openRjSchedulePanel) {
+      closeRjSchedulePanel();
+    }
   });
 
   els.listSetButtons.forEach((button) => {
@@ -409,32 +460,20 @@ function wireEvents() {
   });
 
   els.recurringToggleBtn.addEventListener("click", toggleRecurringFormPin);
+  els.rjOwnerToggle.addEventListener("click", toggleRjComposerOwner);
   els.recurringInterval.addEventListener("change", handleRecurringIntervalChange);
   els.recurringShowDays.addEventListener("change", handleRecurringShowDayChange);
-  els.recurringPanel.addEventListener("pointerenter", openRecurringPanel);
-  els.recurringPanel.addEventListener("pointerleave", scheduleRecurringPanelClose);
-  els.recurringPanelContent.addEventListener("pointerenter", openRecurringPanel);
-  els.recurringPanelContent.addEventListener("pointerleave", scheduleRecurringPanelClose);
-  els.recurringPanel.addEventListener("focusin", openRecurringPanel);
-  els.recurringPanel.addEventListener("focusout", closeRecurringPanelAfterFocusLeaves);
-  els.recurringPanelToggle.addEventListener("click", handleRecurringPanelToggleClick);
-  els.partnerRecurringPanel.addEventListener("pointerenter", openPartnerRecurringPanel);
-  els.partnerRecurringPanel.addEventListener("pointerleave", schedulePartnerRecurringPanelClose);
-
-  els.cancelEditButtons.forEach((button) => {
-    button.addEventListener("click", () =>
-      cancelTaskEdit(button.dataset.cancelEdit === "schedms" ? null : button.dataset.cancelEdit)
-    );
-  });
+  wireRjSchedulePanels();
 
   els.addForms.forEach((form) => {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      handleTaskFormSubmit(form);
+      handleTaskFormSubmit(form, event.submitter);
     });
   });
 
   els.schedmsAddForm.addEventListener("submit", handleSchedmsAddSubmit);
+  document.addEventListener("click", handleTaskEditOutsideClick);
 
   Object.entries(els.lists).forEach(([listType, listEls]) => {
     listEls.card.addEventListener("dragover", (event) => handleListDragOver(event, listType));
@@ -847,7 +886,7 @@ function playCompletionTone(audioContext, startTime, frequency, peakGain, durati
   oscillator.stop(startTime + duration + 0.03);
 }
 
-function handleTaskFormSubmit(form) {
+function handleTaskFormSubmit(form, submitter = null) {
   if (isReadOnlyView()) {
     return;
   }
@@ -871,7 +910,69 @@ function handleTaskFormSubmit(form) {
     return;
   }
 
+  if (state.activeListSet === "rj" && listType === "persistent") {
+    addNewRjItem(
+      text,
+      rjComposerOwner,
+      submitter?.dataset?.rjKind || RJ_LIST_KIND_TODO
+    );
+    return;
+  }
+
   addNewTask(listType, text, isTaskOptionsSubmit);
+}
+
+function addNewRjItem(text, owner, kind) {
+  const normalizedOwner = owner === "shared" ? "shared" : "mine";
+  const normalizedKind = kind === RJ_LIST_KIND_SCHEDULE ? RJ_LIST_KIND_SCHEDULE : RJ_LIST_KIND_TODO;
+
+  if (normalizedOwner === "shared" && !getAcceptedPairing()) {
+    setFormError("persistent", "Pair with another user before adding shared items.");
+    return;
+  }
+
+  const taskId = crypto.randomUUID();
+  const task = createRjListTask(taskId, text, normalizedKind);
+
+  if (normalizedOwner === "shared") {
+    sharedRjState.tasks[normalizedKind].push(task);
+    saveSharedRjState();
+  } else {
+    state.listSets.rj.tasks.persistent.push(task);
+    saveState();
+  }
+
+  pendingAppendAnimations.add(taskId);
+  window.setTimeout(() => pendingAppendAnimations.delete(taskId), 500);
+  getTaskInput("persistent").value = "";
+  resetRecurringShowDayControls();
+  closeRecurringForm({ immediate: true });
+  setFormError("persistent", "");
+  renderAll();
+  getTaskInput("persistent").focus();
+}
+
+function createRjListTask(taskId, text, kind) {
+  if (recurringCreateMode || kind === RJ_LIST_KIND_SCHEDULE) {
+    const task = recurringCreateMode
+      ? createRjTaskFromOptions(taskId, text)
+      : {
+          id: taskId,
+          text,
+          done: false,
+          priority: false,
+        };
+    task.irlKind = kind;
+    return task;
+  }
+
+  return {
+    id: taskId,
+    text,
+    done: false,
+    priority: false,
+    irlKind: RJ_LIST_KIND_TODO,
+  };
 }
 
 function addNewTask(listType, text, isTaskOptionsSubmit) {
@@ -904,15 +1005,19 @@ function updateEditedTask(listType, text, isTaskOptionsSubmit) {
     return;
   }
 
-  const activeSet = getActiveListSet();
-  const task = activeSet.tasks[listType].find((item) => item.id === editState.taskId);
+  const isRjEdit = state.activeListSet === "rj" && listType === "persistent";
+  const editOwner = isRjEdit && editState?.owner === "shared" ? "shared" : "mine";
+  const editKind = normalizeRjListKind(editState?.rjKind) || RJ_LIST_KIND_TODO;
+  const taskCollection =
+    editOwner === "shared" ? sharedRjState.tasks[editKind] : getActiveListSet().tasks[listType];
+  const task = taskCollection.find((item) => item.id === editState.taskId);
 
   if (!task) {
     cancelTaskEdit(listType);
     return;
   }
 
-  const beforePositions = captureTaskPositions(listType);
+  const beforePositions = isRjEdit ? null : captureTaskPositions(listType);
   const wasRecurring = isRecurringTask(task);
   const wasScheduled = isScheduledOneTimeTask(task);
 
@@ -924,10 +1029,20 @@ function updateEditedTask(listType, text, isTaskOptionsSubmit) {
     clearTaskTimingFields(task);
   }
 
+  if (isRjEdit) {
+    task.irlKind = editKind;
+  }
+
   finishTaskEdit(listType);
-  saveState();
+  if (editOwner === "shared") {
+    saveSharedRjState();
+  } else {
+    saveState();
+  }
   renderAll();
-  animateListReflow(listType, beforePositions);
+  if (beforePositions) {
+    animateListReflow(listType, beforePositions);
+  }
 }
 
 function createRjTaskFromOptions(taskId, text) {
@@ -1112,11 +1227,7 @@ function getTaskInput(listType) {
 }
 
 function getTaskSubmitButton(listType) {
-  return getTaskEditForm(listType).querySelector(".add-task-submit-btn");
-}
-
-function getTaskEditCancelButton(listType) {
-  return getTaskEditForm(listType).querySelector("[data-cancel-edit]");
+  return getTaskEditForm(listType).querySelector(".add-task-submit-btn, .rj-target-btn");
 }
 
 function getTaskEditForm(listType) {
@@ -1125,10 +1236,6 @@ function getTaskEditForm(listType) {
 
 function usesSchedmsEditBar() {
   return state.activeListSet === "schedms";
-}
-
-function getTaskEditSurfaceKey(listType) {
-  return usesSchedmsEditBar() ? "schedms" : listType;
 }
 
 function isEditingTask(listType, taskId = null) {
@@ -1141,6 +1248,10 @@ function isEditingTask(listType, taskId = null) {
 
 function getListTypeTaskLabel(listType) {
   if (listType === "persistent") {
+    if (state.activeListSet === "rj" && editState?.rjKind === RJ_LIST_KIND_SCHEDULE) {
+      return "event";
+    }
+
     return "to-do task";
   }
 
@@ -1151,13 +1262,22 @@ function updateTaskInputPlaceholder(listType) {
   const input = getTaskInput(listType);
 
   if (isEditingTask(listType)) {
-    input.placeholder =
-      listType === "persistent" && recurringCreateMode ? "Edit to-do item options" : EDIT_TASK_PLACEHOLDERS[listType];
+    if (state.activeListSet === "rj" && listType === "persistent") {
+      const itemLabel = editState?.rjKind === RJ_LIST_KIND_SCHEDULE ? "event" : "to-do item";
+      input.placeholder = recurringCreateMode ? `Edit ${itemLabel} options` : `Edit ${itemLabel}`;
+    } else {
+      input.placeholder = EDIT_TASK_PLACEHOLDERS[listType];
+    }
     return;
   }
 
   if (usesSchedmsEditBar()) {
     input.placeholder = "Add task";
+    return;
+  }
+
+  if (state.activeListSet === "rj" && listType === "persistent") {
+    input.placeholder = "Add a to-do or event";
     return;
   }
 
@@ -1170,67 +1290,31 @@ function updateTaskInputPlaceholder(listType) {
 function setTaskFormEditingState(listType, isEditing) {
   const form = getTaskEditForm(listType);
   const submitButton = getTaskSubmitButton(listType);
-  const cancelButton = getTaskEditCancelButton(listType);
   const taskLabel = getListTypeTaskLabel(listType);
-  const editSurfaceKey = getTaskEditSurfaceKey(listType);
-
-  clearEditCancelHideTimer(editSurfaceKey);
-  cancelButton.hidden = false;
-  cancelButton.disabled = !isEditing;
-  cancelButton.setAttribute("aria-hidden", String(!isEditing));
-  cancelButton.tabIndex = isEditing ? 0 : -1;
   form.classList.toggle("editing-task", isEditing);
-  submitButton.textContent = isEditing ? SAVE_TASK_SYMBOL : ADD_TASK_SYMBOL;
-  submitButton.setAttribute("aria-label", isEditing ? `Save ${taskLabel}` : `Add ${taskLabel}`);
-  submitButton.title = isEditing ? "Save task" : "Add task";
+
+  if (form.classList.contains("rj-composer-form")) {
+    form.querySelectorAll(".rj-target-btn").forEach((button, index) => {
+      button.classList.toggle("edit-submit-target", isEditing && index === 0);
+      button.hidden = isEditing && index !== 0;
+    });
+    submitButton.setAttribute("aria-label", isEditing ? `Save ${taskLabel}` : "Add to my to-do list");
+    submitButton.title = isEditing ? "Save task" : "Add to my to-do list";
+    updateRjTargetButtons();
+  } else {
+    submitButton.textContent = isEditing ? SAVE_TASK_SYMBOL : ADD_TASK_SYMBOL;
+    submitButton.setAttribute("aria-label", isEditing ? `Save ${taskLabel}` : `Add ${taskLabel}`);
+    submitButton.title = isEditing ? "Save task" : "Add task";
+  }
   updateTaskInputPlaceholder(listType);
 
   if (usesSchedmsEditBar()) {
     syncCustomSelect(els.schedmsTargetList);
   }
 
-  if (!isEditing) {
-    hideEditCancelButtonAfterCollapse(editSurfaceKey, cancelButton);
-  }
 }
 
-function clearEditCancelHideTimer(listType) {
-  const timerId = editCancelHideTimers.get(listType);
-
-  if (timerId !== undefined) {
-    window.clearTimeout(timerId);
-    editCancelHideTimers.delete(listType);
-  }
-}
-
-function hideEditCancelButtonAfterCollapse(listType, cancelButton) {
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  if (reduceMotion) {
-    cancelButton.hidden = true;
-    return;
-  }
-
-  const timerId = window.setTimeout(() => {
-    editCancelHideTimers.delete(listType);
-
-    if (!isTaskEditSurfaceActive(listType)) {
-      cancelButton.hidden = true;
-    }
-  }, EDIT_CANCEL_MOTION_MS + 30);
-
-  editCancelHideTimers.set(listType, timerId);
-}
-
-function isTaskEditSurfaceActive(editSurfaceKey) {
-  if (editSurfaceKey === "schedms") {
-    return editState?.listSetId === "schedms";
-  }
-
-  return isEditingTask(editSurfaceKey);
-}
-
-function prepareTaskEditMode(listType, task) {
+function prepareTaskEditMode(listType, task, editContext = {}) {
   const taskId = task.id;
 
   if (editState && !isEditingTask(listType, taskId)) {
@@ -1241,6 +1325,8 @@ function prepareTaskEditMode(listType, task) {
     listSetId: state.activeListSet,
     listType,
     taskId,
+    owner: editContext.owner === "shared" ? "shared" : "mine",
+    rjKind: normalizeRjListKind(editContext.rjKind || task?.irlKind),
   };
 
   const input = getTaskInput(listType);
@@ -1299,6 +1385,35 @@ function cancelTaskEdit(listType = null) {
   renderAll();
 }
 
+function handleTaskEditOutsideClick(event) {
+  if (!editState || isTaskEditInteraction(event)) {
+    return;
+  }
+
+  cancelTaskEdit();
+}
+
+function isTaskEditInteraction(event) {
+  const editedListType = editState?.listType;
+
+  if (!editedListType) {
+    return false;
+  }
+
+  const eventPath = typeof event.composedPath === "function" ? event.composedPath() : [];
+  const allowedSurfaces = [getTaskInput(editedListType), getTaskSubmitButton(editedListType)];
+
+  if (usesSchedmsEditBar()) {
+    allowedSurfaces.push(els.schedmsTargetList, els.schedmsTargetList.closest(".custom-select"));
+  } else if (usesRecurringTaskGrouping(editedListType)) {
+    allowedSurfaces.push(els.recurringToggleBtn, els.recurringTools);
+  }
+
+  return allowedSurfaces.some(
+    (surface) => surface && (eventPath.includes(surface) || surface.contains(event.target))
+  );
+}
+
 function hydrateRecurringControlsFromTask(task) {
   if (isRecurringTask(task)) {
     els.recurringInterval.value =
@@ -1325,6 +1440,79 @@ function setRecurringShowDayControls(showDays) {
 
 function isTaskOptionsOpenForList(listType) {
   return state.activeListSet === "rj" && listType === "persistent" && recurringCreateMode;
+}
+
+function wireRjSchedulePanels() {
+  els.rjSchedulePanels.forEach((panel) => {
+    const toggle = panel.querySelector(".recurring-panel-toggle");
+
+    toggle.addEventListener("click", () => {
+      setRjSchedulePanelOpen(panel, openRjSchedulePanel !== panel);
+    });
+    panel.addEventListener("pointerenter", cancelRjSchedulePanelClose);
+    panel.addEventListener("pointerleave", () => scheduleRjSchedulePanelClose(panel));
+    panel.addEventListener("focusin", cancelRjSchedulePanelClose);
+    panel.addEventListener("focusout", (event) => {
+      if (!event.relatedTarget || !panel.contains(event.relatedTarget)) {
+        scheduleRjSchedulePanelClose(panel);
+      }
+    });
+  });
+
+  document.addEventListener("click", (event) => {
+    if (openRjSchedulePanel && !openRjSchedulePanel.contains(event.target)) {
+      closeRjSchedulePanel();
+    }
+  });
+}
+
+function setRjSchedulePanelOpen(panel, isOpen) {
+  cancelRjSchedulePanelClose();
+
+  if (openRjSchedulePanel && openRjSchedulePanel !== panel) {
+    updateRjSchedulePanelOpenState(openRjSchedulePanel, false);
+  }
+
+  updateRjSchedulePanelOpenState(panel, isOpen);
+  openRjSchedulePanel = isOpen ? panel : null;
+}
+
+function updateRjSchedulePanelOpenState(panel, isOpen) {
+  const toggle = panel.querySelector(".recurring-panel-toggle");
+  const content = panel.querySelector(".recurring-panel-content");
+
+  panel.classList.toggle("open", isOpen);
+  toggle.setAttribute("aria-expanded", String(isOpen));
+  content.hidden = !isOpen;
+}
+
+function scheduleRjSchedulePanelClose(panel) {
+  cancelRjSchedulePanelClose();
+  rjSchedulePanelCloseTimer = window.setTimeout(() => {
+    rjSchedulePanelCloseTimer = null;
+
+    if (!panel.matches(":hover")) {
+      setRjSchedulePanelOpen(panel, false);
+    }
+  }, RECURRING_PANEL_CLOSE_DELAY_MS);
+}
+
+function cancelRjSchedulePanelClose() {
+  if (rjSchedulePanelCloseTimer === null) {
+    return;
+  }
+
+  window.clearTimeout(rjSchedulePanelCloseTimer);
+  rjSchedulePanelCloseTimer = null;
+}
+
+function closeRjSchedulePanel() {
+  cancelRjSchedulePanelClose();
+
+  if (openRjSchedulePanel) {
+    updateRjSchedulePanelOpenState(openRjSchedulePanel, false);
+    openRjSchedulePanel = null;
+  }
 }
 
 function openRecurringPanel() {
@@ -1594,9 +1782,11 @@ function renderAll() {
     renderList(listType);
   });
 
+  renderMineRjScheduleList();
+  renderSharedRjLists();
   renderPartnerRjList();
   renderPartnerMsLists();
-  renderRecurringPanel();
+  renderRjSchedulePanels();
   renderResetLabels();
 }
 
@@ -1609,7 +1799,9 @@ function renderActiveLayout() {
   els.schedmsQuickAdd.hidden = isReadOnly || isRjMode;
   els.rjComposer.hidden = !isRjMode || isReadOnly;
   els.recurringTools.hidden = !isRjMode;
-  els.recurringPanel.hidden = !isRjMode;
+  els.rjSchedulePanels.forEach((panel) => {
+    panel.hidden = !isRjMode;
+  });
   els.timezoneOffset.disabled = isReadOnly;
   els.dstAdjustment.disabled = isReadOnly;
   syncCustomSelect(els.timezoneOffset);
@@ -1618,19 +1810,34 @@ function renderActiveLayout() {
   els.lists.weekly.card.hidden = isRjMode;
   const hasPairedRjList = isRjMode && Boolean(getAcceptedPairing());
   const hasPairedMsLists = !isRjMode && Boolean(getAcceptedPairing());
+
+  if (
+    !hasPairedRjList &&
+    openRjSchedulePanel &&
+    openRjSchedulePanel.dataset.rjScheduleOwner !== "mine"
+  ) {
+    closeRjSchedulePanel();
+  }
+
   els.app.classList.toggle("paired-rj", hasPairedRjList);
+  els.rjOnlyElements.forEach((element) => {
+    element.hidden = !isRjMode;
+  });
+  els.mineRjScheduleCard.hidden = !isRjMode;
+  els.sharedRjTodoCard.hidden = !hasPairedRjList;
+  els.sharedRjScheduleCard.hidden = !hasPairedRjList;
   els.partnerRjCard.hidden = !hasPairedRjList;
+  els.partnerRjScheduleCard.hidden = !hasPairedRjList;
+  els.sharedRjColumnHeader.hidden = !hasPairedRjList;
+  els.partnerRjColumnHeader.hidden = !hasPairedRjList;
   els.mineMsTitle.hidden = !hasPairedMsLists;
   els.partnerMsSection.hidden = !hasPairedMsLists;
-  els.persistentListTitle.textContent = hasPairedRjList ? "Mine" : "To-Do";
+  els.persistentListTitle.textContent = isRjMode ? "To-do" : "To-Do";
+  updateRjTargetButtons();
 
   if (!isRjMode) {
     closeRecurringForm();
-    setRecurringPanelOpen(false);
-  }
-
-  if (isRjMode) {
-    setRecurringPanelOpen(recurringPanelOpen);
+    closeRjSchedulePanel();
   }
 }
 
@@ -1640,6 +1847,329 @@ function renderListSetSwitcher() {
     button.classList.toggle("active", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   });
+}
+
+function renderMineRjScheduleList() {
+  if (state.activeListSet !== "rj") {
+    return;
+  }
+
+  const tasks = state.listSets.rj.tasks.persistent.filter(isRjScheduleTask);
+  renderInteractiveRjList(tasks, els.mineRjScheduleList, els.mineRjScheduleEmpty, "mine", RJ_LIST_KIND_SCHEDULE);
+}
+
+function renderSharedRjLists() {
+  const shouldShow = state.activeListSet === "rj" && Boolean(getAcceptedPairing());
+
+  if (!shouldShow) {
+    els.sharedRjTodoList.innerHTML = "";
+    els.sharedRjScheduleList.innerHTML = "";
+    return;
+  }
+
+  renderInteractiveRjList(
+    sharedRjState.tasks.todo,
+    els.sharedRjTodoList,
+    els.sharedRjTodoEmpty,
+    "shared",
+    RJ_LIST_KIND_TODO
+  );
+  renderInteractiveRjList(
+    sharedRjState.tasks.schedule,
+    els.sharedRjScheduleList,
+    els.sharedRjScheduleEmpty,
+    "shared",
+    RJ_LIST_KIND_SCHEDULE
+  );
+}
+
+function renderInteractiveRjList(tasks, listEl, emptyEl, owner, kind) {
+  const orderedTasks =
+    kind === RJ_LIST_KIND_TODO
+      ? getVisibleTasksForList("persistent", orderTasksForList("persistent", tasks))
+      : orderTasksByDone(tasks);
+  listEl.innerHTML = "";
+
+  orderedTasks.forEach((task) => {
+    const isTaskEditing = isEditingTask("persistent", task.id);
+    const item = document.createElement("li");
+    item.className = `task-item ${task.done ? "done" : ""} ${task.priority ? "priority" : ""} ${
+      isRecurringTask(task) ? "recurring-task" : ""
+    }`;
+    item.dataset.taskId = task.id;
+    item.dataset.recurring = String(isRecurringTask(task));
+    item.dataset.taskGroup = getRjTaskGroup(task);
+
+    if (isTaskEditing) {
+      item.classList.add("editing");
+    }
+
+    if (pendingAppendAnimations.has(task.id)) {
+      item.classList.add("append-enter");
+    }
+
+    const priorityButton = document.createElement("button");
+    priorityButton.type = "button";
+    priorityButton.className = `task-priority-btn ${task.priority ? "active" : ""}`;
+    priorityButton.setAttribute(
+      "aria-label",
+      `${task.priority ? "Remove priority from" : "Mark as priority"}: ${task.text}`
+    );
+    priorityButton.setAttribute("aria-pressed", String(task.priority));
+    const priorityIcon = document.createElement("span");
+    priorityIcon.className = "priority-star-icon";
+    priorityIcon.setAttribute("aria-hidden", "true");
+    priorityIcon.textContent = task.priority ? "\u2605" : "\u2606";
+    priorityButton.appendChild(priorityIcon);
+
+    const label = document.createElement("label");
+    label.className = "task-main";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = task.done;
+    checkbox.setAttribute("aria-label", task.text);
+    const copy = document.createElement("span");
+    copy.className = "task-copy";
+    copy.textContent = task.text;
+    label.append(checkbox, copy);
+
+    if (isRecurringTask(task)) {
+      const repeatBadge = document.createElement("span");
+      repeatBadge.className = "task-badge";
+      repeatBadge.textContent = "\u21bb";
+      repeatBadge.setAttribute("aria-label", "Recurring");
+      repeatBadge.title = `${formatRecurringIntervalLabel(task.intervalDays)}; ${formatRecurringShowDays(task)}`;
+      label.appendChild(repeatBadge);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "task-actions";
+    const actionsToggleButton = document.createElement("button");
+    actionsToggleButton.type = "button";
+    actionsToggleButton.className = "task-action-btn task-actions-toggle";
+    actionsToggleButton.setAttribute("aria-label", `Show actions for: ${task.text}`);
+    actionsToggleButton.setAttribute("aria-expanded", "false");
+    actionsToggleButton.textContent = "\u22ef";
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "task-action-btn edit-btn";
+    editButton.setAttribute("aria-label", `Edit item: ${task.text}`);
+    editButton.title = "Edit item";
+    const editIcon = document.createElement("span");
+    editIcon.className = "edit-icon";
+    editIcon.setAttribute("aria-hidden", "true");
+    editButton.appendChild(editIcon);
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "task-action-btn delete-btn";
+    deleteButton.setAttribute("aria-label", `Remove item: ${task.text}`);
+    deleteButton.title = "Remove item";
+    const trashIcon = document.createElement("span");
+    trashIcon.className = "trash-icon";
+    trashIcon.setAttribute("aria-hidden", "true");
+    deleteButton.appendChild(trashIcon);
+    actions.append(actionsToggleButton, editButton, deleteButton);
+
+    if (isTaskEditing) {
+      checkbox.disabled = true;
+      priorityButton.disabled = true;
+      actionsToggleButton.disabled = true;
+      editButton.disabled = true;
+      deleteButton.disabled = true;
+    }
+
+    let taskActionStarted = false;
+    let taskPointerStart = null;
+    let priorityToggleStarted = false;
+
+    const persistChange = () => {
+      if (owner === "shared") {
+        saveSharedRjState();
+      } else {
+        saveState();
+      }
+      renderAll();
+    };
+
+    const togglePriority = () => {
+      if (priorityButton.disabled || priorityToggleStarted) {
+        return;
+      }
+
+      priorityToggleStarted = true;
+      task.priority = !task.priority;
+      persistChange();
+    };
+
+    const setTaskDone = (nextDone) => {
+      if (checkbox.disabled || taskActionStarted || task.done === nextDone) {
+        checkbox.checked = task.done;
+        return;
+      }
+
+      taskActionStarted = true;
+      if (nextDone) {
+        playTaskCompleteSound(task.priority);
+      }
+
+      if (owner === "mine") {
+        moveTaskAfterDoneChange("persistent", task.id, nextDone);
+      } else {
+        setTaskCompletionState(task, nextDone);
+        updateRecurringTaskCompletionFields(task, nextDone);
+      }
+      persistChange();
+    };
+
+    item.addEventListener("pointerdown", (event) => {
+      if (
+        event.button !== 0 ||
+        checkbox.disabled ||
+        event.target.closest(".task-action-btn, .task-priority-btn")
+      ) {
+        return;
+      }
+
+      taskPointerStart = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+    });
+
+    item.addEventListener("pointerup", (event) => {
+      if (
+        event.button !== 0 ||
+        checkbox.disabled ||
+        !taskPointerStart ||
+        taskPointerStart.pointerId !== event.pointerId ||
+        event.target.closest(".task-action-btn, .task-priority-btn")
+      ) {
+        taskPointerStart = null;
+        return;
+      }
+
+      const movedX = Math.abs(event.clientX - taskPointerStart.x);
+      const movedY = Math.abs(event.clientY - taskPointerStart.y);
+      taskPointerStart = null;
+
+      if (movedX <= 6 && movedY <= 6) {
+        event.preventDefault();
+        setTaskDone(!checkbox.checked);
+      }
+    });
+
+    item.addEventListener("pointercancel", () => {
+      taskPointerStart = null;
+    });
+
+    checkbox.addEventListener("change", () => {
+      setTaskDone(checkbox.checked);
+    });
+
+    actionsToggleButton.addEventListener("click", () => {
+      const isOpen = item.classList.toggle("actions-open");
+      actionsToggleButton.setAttribute("aria-expanded", String(isOpen));
+      actionsToggleButton.setAttribute("aria-label", `${isOpen ? "Hide" : "Show"} actions for: ${task.text}`);
+    });
+
+    priorityButton.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || priorityButton.disabled) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      togglePriority();
+    });
+
+    priorityButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      togglePriority();
+    });
+
+    const editTask = () => {
+      if (editButton.disabled || taskActionStarted) {
+        return;
+      }
+
+      taskActionStarted = true;
+      checkbox.disabled = true;
+      priorityButton.disabled = true;
+      editButton.disabled = true;
+      deleteButton.disabled = true;
+      setFormError("persistent", "");
+      setRecurringError("");
+
+      runTaskEditAnimation(
+        item,
+        "persistent",
+        task,
+        () => {
+          if (isEditingTask("persistent", task.id)) {
+            focusTaskEditInput("persistent");
+          }
+        },
+        { owner, rjKind: kind }
+      );
+    };
+
+    editButton.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || editButton.disabled) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      editTask();
+    });
+
+    editButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      editTask();
+    });
+
+    deleteButton.addEventListener("click", () => {
+      if (deleteButton.disabled || taskActionStarted) {
+        return;
+      }
+
+      taskActionStarted = true;
+      if (owner === "mine") {
+        if (!removeTaskFromList("persistent", task.id)) {
+          return;
+        }
+      } else {
+        const taskIndex = tasks.findIndex((candidate) => candidate.id === task.id);
+        if (taskIndex < 0) {
+          return;
+        }
+        tasks.splice(taskIndex, 1);
+      }
+      pendingAppendAnimations.delete(task.id);
+      persistChange();
+    });
+
+    item.append(priorityButton, label, actions);
+    listEl.appendChild(item);
+  });
+
+  emptyEl.style.display = orderedTasks.length === 0 ? "block" : "none";
+}
+
+function updateRecurringTaskCompletionFields(task, done) {
+  if (!isRecurringTask(task)) {
+    return;
+  }
+
+  const todayId = dailyPeriodId(new Date());
+  task.recurringStartDate = normalizeDateId(task.recurringStartDate) || todayId;
+
+  if (done) {
+    task.lastCompletedDate = todayId;
+    task.nextDueDate = addDaysToDateId(todayId, task.intervalDays);
+    delete task.lastRestoredDate;
+    return;
+  }
+
+  task.lastRestoredDate = todayId;
+  task.nextDueDate = addDaysToDateId(todayId, task.intervalDays);
 }
 
 function renderPartnerRjList() {
@@ -1654,10 +2184,14 @@ function renderPartnerRjList() {
   }
 
   const partnerName = getPairingDisplayName(acceptedPairing);
-  els.partnerRjTitle.textContent = partnerName;
+  els.partnerRjTitle.textContent = "To-do";
+  els.partnerRjScheduleTitle.textContent = "Schedule";
+  els.partnerRjColumnTitle.textContent = partnerName;
   els.partnerRjList.setAttribute("aria-label", `${partnerName}'s IRL list`);
+  els.partnerRjScheduleList.setAttribute("aria-label", `${partnerName}'s schedule`);
 
-  const tasks = partnerState?.listSets?.rj?.tasks?.persistent || [];
+  const partnerTasks = partnerState?.listSets?.rj?.tasks?.persistent || [];
+  const tasks = partnerTasks.filter(isRjTodoTask);
   const visibleTasks = getVisibleTasksForList("persistent", orderTasksForList("persistent", tasks));
 
   visibleTasks.forEach((task) => {
@@ -1687,16 +2221,10 @@ function renderPartnerRjList() {
     label.append(checkbox, copy);
 
     if (isRecurringTask(task)) {
-      const daysLeftText = formatRecurringDaysLeft(task);
-      if (daysLeftText) {
-        const daysLeft = document.createElement("span");
-        daysLeft.className = "task-days-left";
-        daysLeft.textContent = daysLeftText;
-        label.appendChild(daysLeft);
-      }
       const badge = document.createElement("span");
       badge.className = "task-badge";
       badge.textContent = "\u21bb";
+      badge.setAttribute("aria-label", "Recurring");
       badge.title = `${formatRecurringIntervalLabel(task.intervalDays)}; ${formatRecurringShowDays(task)}`;
       label.appendChild(badge);
     }
@@ -1706,7 +2234,51 @@ function renderPartnerRjList() {
   });
 
   els.partnerRjEmpty.hidden = visibleTasks.length > 0;
-  renderPartnerRecurringPanel(tasks);
+  renderReadOnlyRjScheduleList(partnerTasks.filter(isRjScheduleTask));
+}
+
+function renderReadOnlyRjScheduleList(tasks) {
+  const orderedTasks = orderTasksByDone(tasks);
+  els.partnerRjScheduleList.innerHTML = "";
+
+  orderedTasks.forEach((task) => {
+    const item = document.createElement("li");
+    item.className = `task-item partner-task-item ${task.done ? "done" : ""} ${task.priority ? "priority" : ""} ${
+      isRecurringTask(task) ? "recurring-task" : ""
+    }`;
+    const priority = document.createElement("span");
+    priority.className = `task-priority-btn ${task.priority ? "active" : ""}`;
+    priority.setAttribute("aria-hidden", "true");
+    const priorityIcon = document.createElement("span");
+    priorityIcon.className = "priority-star-icon";
+    priorityIcon.textContent = task.priority ? "\u2605" : "\u2606";
+    priority.appendChild(priorityIcon);
+    const label = document.createElement("label");
+    label.className = "task-main";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = task.done;
+    checkbox.disabled = true;
+    checkbox.setAttribute("aria-label", `${task.text} (read only)`);
+    const copy = document.createElement("span");
+    copy.className = "task-copy";
+    copy.textContent = task.text;
+    label.append(checkbox, copy);
+
+    if (isRecurringTask(task)) {
+      const badge = document.createElement("span");
+      badge.className = "task-badge";
+      badge.textContent = "\u21bb";
+      badge.setAttribute("aria-label", "Recurring");
+      badge.title = `${formatRecurringIntervalLabel(task.intervalDays)}; ${formatRecurringShowDays(task)}`;
+      label.appendChild(badge);
+    }
+
+    item.append(priority, label);
+    els.partnerRjScheduleList.appendChild(item);
+  });
+
+  els.partnerRjScheduleEmpty.style.display = orderedTasks.length === 0 ? "block" : "none";
 }
 
 function openPartnerRecurringPanel() {
@@ -1733,13 +2305,15 @@ function schedulePartnerRecurringPanelClose() {
 
 function renderPartnerRecurringPanel(tasks) {
   const scheduledTasks = getScheduledPanelTasks(tasks);
-  els.partnerRecurringPanel.hidden = false;
   els.partnerRecurringPanelCount.textContent = String(scheduledTasks.length);
   els.partnerRecurringPanelList.innerHTML = "";
 
   scheduledTasks.forEach((task) => {
     const item = document.createElement("li");
-    item.className = `recurring-summary-item ${task.done ? "done" : ""}`;
+    item.className = `recurring-summary-item ${task.done ? "done" : ""} ${
+      doesScheduledTaskShowToday(task) ? "is-active" : ""
+    }`;
+    const kindLabel = createRecurringKindLabel(task);
     const copy = document.createElement("div");
     copy.className = "recurring-summary-copy";
     const title = document.createElement("span");
@@ -1748,12 +2322,49 @@ function renderPartnerRecurringPanel(tasks) {
     const meta = document.createElement("span");
     meta.className = "recurring-summary-meta";
     meta.textContent = formatScheduledPanelMeta(task);
+    const status = createScheduledPanelStatus(task);
     copy.append(title, meta);
-    item.appendChild(copy);
+    item.append(kindLabel, copy);
+
+    if (status) {
+      item.appendChild(status);
+    }
     els.partnerRecurringPanelList.appendChild(item);
   });
 
   els.partnerRecurringPanelEmpty.hidden = scheduledTasks.length > 0;
+}
+
+function renderSharedRecurringPanel(tasks) {
+  const scheduledTasks = getScheduledPanelTasks(tasks);
+  els.sharedRecurringPanelCount.textContent = String(scheduledTasks.length);
+  els.sharedRecurringPanelList.innerHTML = "";
+
+  scheduledTasks.forEach((task) => {
+    const item = document.createElement("li");
+    item.className = `recurring-summary-item ${task.done ? "done" : ""} ${
+      doesScheduledTaskShowToday(task) ? "is-active" : ""
+    }`;
+    const kindLabel = createRecurringKindLabel(task);
+    const copy = document.createElement("div");
+    copy.className = "recurring-summary-copy";
+    const title = document.createElement("span");
+    title.className = "recurring-summary-title";
+    title.textContent = task.text;
+    const meta = document.createElement("span");
+    meta.className = "recurring-summary-meta";
+    meta.textContent = formatScheduledPanelMeta(task);
+    const status = createScheduledPanelStatus(task);
+    copy.append(title, meta);
+    item.append(kindLabel, copy);
+
+    if (status) {
+      item.appendChild(status);
+    }
+    els.sharedRecurringPanelList.appendChild(item);
+  });
+
+  els.sharedRecurringPanelEmpty.hidden = scheduledTasks.length > 0;
 }
 
 function renderPartnerMsLists() {
@@ -1814,15 +2425,23 @@ function renderReadOnlyTaskList(listType, tasks, listEl, emptyEl) {
 function renderList(listType) {
   const activeSet = getActiveListSet();
   const taskSet = activeSet.tasks[listType];
+  const isRjPersistentList = state.activeListSet === "rj" && listType === "persistent";
+  const surfaceTaskSet = isRjPersistentList ? taskSet.filter(isRjTodoTask) : taskSet;
   const listEl = els.lists[listType].list;
   const emptyEl = els.lists[listType].empty;
   const formEl = els.lists[listType].form;
   const isReadOnly = isReadOnlyView();
 
-  const orderedTasks = orderTasksForList(listType, taskSet);
-  const visibleTasks = getVisibleTasksForList(listType, orderedTasks);
   formEl.style.display = shouldShowListForm(listType) ? "" : "none";
   setFormError(listType, "");
+
+  if (isRjPersistentList) {
+    renderInteractiveRjList(surfaceTaskSet, listEl, emptyEl, "mine", RJ_LIST_KIND_TODO);
+    return;
+  }
+
+  const orderedTasks = orderTasksForList(listType, surfaceTaskSet);
+  const visibleTasks = getVisibleTasksForList(listType, orderedTasks);
 
   listEl.innerHTML = "";
 
@@ -1835,7 +2454,11 @@ function renderList(listType) {
     li.dataset.taskId = task.id;
     li.dataset.recurring = String(isRecurringTask(task));
     li.dataset.taskGroup = getRjTaskGroup(task);
-    li.draggable = !isReadOnly && !isTaskEditing && !task.done;
+    li.draggable =
+      !isReadOnly &&
+      !isTaskEditing &&
+      !task.done &&
+      !(state.activeListSet === "rj" && listType === "persistent");
 
     if (isTaskEditing) {
       li.classList.add("editing");
@@ -2131,7 +2754,7 @@ function renderList(listType) {
 
       const editListSetId = state.activeListSet;
       runTaskEditAnimation(li, listType, task, () => {
-        if (state.activeListSet !== editListSetId) {
+        if (state.activeListSet !== editListSetId || !isEditingTask(listType, task.id)) {
           return;
         }
 
@@ -2189,6 +2812,7 @@ function renderRecurringPanel() {
     li.className = `recurring-summary-item ${task.done ? "done" : ""} ${
       doesScheduledTaskShowToday(task) ? "is-active" : ""
     }`;
+    const kindLabel = createRecurringKindLabel(task);
 
     const copy = document.createElement("div");
     copy.className = "recurring-summary-copy";
@@ -2297,7 +2921,7 @@ function renderRecurringPanel() {
     });
 
     copy.append(title, meta);
-    li.append(copy);
+    li.append(kindLabel, copy);
 
     if (status) {
       li.appendChild(status);
@@ -2310,6 +2934,35 @@ function renderRecurringPanel() {
   });
 
   els.recurringPanelEmpty.style.display = scheduledTasks.length === 0 ? "block" : "none";
+}
+
+function renderRjSchedulePanels() {
+  renderRecurringPanel();
+  renderSharedRecurringPanel([...sharedRjState.tasks.todo, ...sharedRjState.tasks.schedule]);
+  renderPartnerRecurringPanel(partnerState?.listSets?.rj?.tasks?.persistent || []);
+}
+
+function createRecurringKindLabel(task) {
+  const isSchedule = isRjScheduleTask(task);
+  const label = document.createElement("span");
+  label.className = `recurring-kind-label ${isSchedule ? "schedule" : "todo"}`;
+  label.textContent = isSchedule ? "\u25f7" : "\u2713";
+  label.setAttribute("aria-label", isSchedule ? "Event" : "To-do");
+  label.title = isSchedule ? "Event" : "To-do";
+  return label;
+}
+
+function createScheduledPanelStatus(task) {
+  if (!shouldShowScheduledPanelStatusBadge(task)) {
+    return null;
+  }
+
+  const status = document.createElement("span");
+  status.className = `recurring-summary-status ${task.done ? "done" : ""} ${
+    doesScheduledTaskShowToday(task) ? "active" : ""
+  }`;
+  status.textContent = formatScheduledPanelStatus(task);
+  return status;
 }
 
 function getScheduledPanelTasks(tasks) {
@@ -2423,6 +3076,68 @@ function isScheduledOneTimeTask(task) {
   return !isRecurringTask(task) && Boolean(normalizeDateId(task?.showOnDate));
 }
 
+function updateRjTargetButtons() {
+  const isEditing = els.rjComposer.querySelector(".rj-composer-form")?.classList.contains("editing-task");
+  const hasPairing = Boolean(getAcceptedPairing());
+
+  if (!hasPairing) {
+    rjComposerOwner = "mine";
+  }
+
+  els.rjTargetButtons.forEach((button, index) => {
+    if (isEditing) {
+      button.hidden = index !== 0;
+      button.disabled = false;
+      return;
+    }
+
+    button.hidden = false;
+    button.disabled = false;
+    const kindLabel = button.dataset.rjKind === RJ_LIST_KIND_SCHEDULE ? "schedule" : "to-do list";
+    const ownerLabel = rjComposerOwner === "shared" ? "shared" : "my";
+    const actionLabel = `Add to ${ownerLabel} ${kindLabel}`;
+    button.setAttribute("aria-label", actionLabel);
+    button.title = actionLabel;
+  });
+
+  const isShared = rjComposerOwner === "shared";
+  els.rjOwnerToggle.hidden = false;
+  els.rjOwnerToggle.disabled = Boolean(isEditing) || !hasPairing;
+  els.rjOwnerToggle.classList.toggle("shared", isShared);
+  els.rjOwnerToggle.setAttribute("aria-checked", String(isShared));
+  els.rjOwnerToggle.setAttribute(
+    "aria-label",
+    hasPairing ? `Add items to ${isShared ? "shared" : "my"} lists` : "Pair an account to use shared lists"
+  );
+  els.rjOwnerToggle.title = hasPairing
+    ? `Adding to ${isShared ? "shared" : "my"} lists`
+    : "Pair an account to use shared lists";
+}
+
+function toggleRjComposerOwner() {
+  if (!getAcceptedPairing() || els.rjOwnerToggle.disabled) {
+    return;
+  }
+
+  rjComposerOwner = rjComposerOwner === "shared" ? "mine" : "shared";
+  setFormError("persistent", "");
+  updateRjTargetButtons();
+}
+
+function isRjScheduleTask(task) {
+  const explicitKind = normalizeRjListKind(task?.irlKind);
+
+  if (explicitKind) {
+    return explicitKind === RJ_LIST_KIND_SCHEDULE;
+  }
+
+  return isRecurringTask(task) || isScheduledOneTimeTask(task);
+}
+
+function isRjTodoTask(task) {
+  return !isRjScheduleTask(task);
+}
+
 function normalizeCompletionOrder(value) {
   const order = Number(value);
   return Number.isSafeInteger(order) && order > 0 ? order : null;
@@ -2444,6 +3159,12 @@ function getNextCompletionOrder() {
       state.listSets[listSetId].tasks[listType].forEach((task) => {
         maxOrder = Math.max(maxOrder, normalizeCompletionOrder(task?.completedOrder) ?? 0);
       });
+    });
+  });
+
+  [sharedRjState.tasks.todo, sharedRjState.tasks.schedule].forEach((tasks) => {
+    tasks.forEach((task) => {
+      maxOrder = Math.max(maxOrder, normalizeCompletionOrder(task?.completedOrder) ?? 0);
     });
   });
 
@@ -2593,13 +3314,13 @@ function animateListReflow(listType, beforePositions) {
   });
 }
 
-function runTaskEditAnimation(itemEl, listType, task, onDone) {
+function runTaskEditAnimation(itemEl, listType, task, onDone, editContext = {}) {
   const targetInput = getTaskInput(listType);
   const sourceCopy = itemEl.querySelector(".task-copy");
   const formEl = getTaskEditForm(listType);
 
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !targetInput || !sourceCopy) {
-    prepareTaskEditMode(listType, task);
+    prepareTaskEditMode(listType, task, editContext);
     renderAll();
     onDone();
     return;
@@ -2611,28 +3332,15 @@ function runTaskEditAnimation(itemEl, listType, task, onDone) {
   }
 
   const sourceRect = itemEl.getBoundingClientRect();
-  const inputStartRect = targetInput.getBoundingClientRect();
   const sourceCopyRect = sourceCopy.getBoundingClientRect();
   const itemStyles = window.getComputedStyle(itemEl);
   const copyStyles = window.getComputedStyle(sourceCopy);
 
   formEl.classList.add("edit-morphing");
-  revealTaskEditCancelButtonForAnimation(listType);
-  prepareTaskEditMode(listType, task);
+  prepareTaskEditMode(listType, task, editContext);
   targetInput.classList.add("edit-morph-target");
 
-  const cancelButton = getTaskEditCancelButton(listType);
-  const cancelMeasurement = expandEditCancelButtonForMeasurement(cancelButton);
-  const cancelFinalWidth = cancelMeasurement.width;
   const finalTargetRect = targetInput.getBoundingClientRect();
-  cancelMeasurement.restore();
-  const cleanupFormAnimation = animateTaskFormControlsForEdit(
-    listType,
-    inputStartRect.width,
-    finalTargetRect.width,
-    cancelFinalWidth,
-    cancelMeasurement.marginLeft
-  );
 
   const inputStyles = window.getComputedStyle(targetInput);
   const sourceLineHeight = getComputedLineHeight(copyStyles);
@@ -2696,7 +3404,6 @@ function runTaskEditAnimation(itemEl, listType, task, onDone) {
     finished = true;
     onDone();
     window.requestAnimationFrame(() => {
-      cleanupFormAnimation();
       formEl.classList.remove("edit-morphing");
       targetInput.classList.remove("edit-morph-target");
       itemEl.classList.remove("edit-origin");
@@ -2776,111 +3483,6 @@ function runTaskEditAnimation(itemEl, listType, task, onDone) {
   }
 
   window.setTimeout(finish, EDIT_TASK_MOTION_MS + 120);
-}
-
-function revealTaskEditCancelButtonForAnimation(listType) {
-  const cancelButton = getTaskEditCancelButton(listType);
-
-  cancelButton.hidden = false;
-  cancelButton.disabled = true;
-  cancelButton.setAttribute("aria-hidden", "true");
-  cancelButton.tabIndex = -1;
-  void cancelButton.offsetWidth;
-}
-
-function expandEditCancelButtonForMeasurement(cancelButton) {
-  const targetWidth = "2.45rem";
-  const previousTransition = cancelButton.style.transition;
-  const previousFlexBasis = cancelButton.style.flexBasis;
-  const previousWidth = cancelButton.style.width;
-  const previousBorderWidth = cancelButton.style.borderWidth;
-  const previousOpacity = cancelButton.style.opacity;
-  const previousTransform = cancelButton.style.transform;
-
-  cancelButton.style.transition = "none";
-  cancelButton.style.flexBasis = targetWidth;
-  cancelButton.style.width = targetWidth;
-  cancelButton.style.borderWidth = "1px";
-  cancelButton.style.opacity = "1";
-  cancelButton.style.transform = "none";
-
-  const width = cancelButton.getBoundingClientRect().width;
-
-  return {
-    width,
-    marginLeft: window.getComputedStyle(cancelButton).marginLeft,
-    restore() {
-      cancelButton.style.transition = previousTransition;
-      cancelButton.style.flexBasis = previousFlexBasis;
-      cancelButton.style.width = previousWidth;
-      cancelButton.style.borderWidth = previousBorderWidth;
-      cancelButton.style.opacity = previousOpacity;
-      cancelButton.style.transform = previousTransform;
-    },
-  };
-}
-
-function animateTaskFormControlsForEdit(listType, startInputWidth, endInputWidth, endCancelWidth, endCancelMarginLeft) {
-  const form = getTaskEditForm(listType);
-  const input = getTaskInput(listType);
-  const cancelButton = getTaskEditCancelButton(listType);
-  const previousFlex = input.style.flex;
-  const previousFlexBasis = input.style.flexBasis;
-  const previousWidth = input.style.width;
-  const previousMaxWidth = input.style.maxWidth;
-  const previousTransition = input.style.transition;
-  const previousCancelFlexBasis = cancelButton.style.flexBasis;
-  const previousCancelWidth = cancelButton.style.width;
-  const previousCancelBorderWidth = cancelButton.style.borderWidth;
-  const previousCancelOpacity = cancelButton.style.opacity;
-  const previousCancelTransform = cancelButton.style.transform;
-  const previousCancelTransition = cancelButton.style.transition;
-  const previousCancelMarginLeft = cancelButton.style.marginLeft;
-  const easing = "cubic-bezier(0.22, 0.72, 0.2, 1)";
-  const inputTiming = `flex-basis ${EDIT_TASK_MOTION_MS}ms ${easing}, width ${EDIT_TASK_MOTION_MS}ms ${easing}, max-width ${EDIT_TASK_MOTION_MS}ms ${easing}`;
-  const cancelTiming = `flex-basis ${EDIT_CANCEL_MOTION_MS}ms ${easing}, width ${EDIT_CANCEL_MOTION_MS}ms ${easing}, margin-left ${EDIT_CANCEL_MOTION_MS}ms ${easing}, opacity 120ms ease, border-width ${EDIT_CANCEL_MOTION_MS}ms ${easing}`;
-
-  input.style.transition = "none";
-  input.style.flex = `0 0 ${startInputWidth}px`;
-  input.style.width = `${startInputWidth}px`;
-  input.style.maxWidth = `${startInputWidth}px`;
-  cancelButton.style.transition = "none";
-  cancelButton.style.flexBasis = "0px";
-  cancelButton.style.width = "0px";
-  cancelButton.style.borderWidth = "0";
-  cancelButton.style.opacity = "0";
-  cancelButton.style.transform = "none";
-  cancelButton.style.marginLeft = "0px";
-  void form.offsetWidth;
-
-  window.requestAnimationFrame(() => {
-    input.style.transition = inputTiming;
-    input.style.flexBasis = `${endInputWidth}px`;
-    input.style.width = `${endInputWidth}px`;
-    input.style.maxWidth = `${endInputWidth}px`;
-    cancelButton.style.transition = cancelTiming;
-    cancelButton.style.flexBasis = `${endCancelWidth}px`;
-    cancelButton.style.width = `${endCancelWidth}px`;
-    cancelButton.style.borderWidth = "1px";
-    cancelButton.style.opacity = "1";
-    cancelButton.style.transform = "none";
-    cancelButton.style.marginLeft = endCancelMarginLeft;
-  });
-
-  return () => {
-    input.style.flex = previousFlex;
-    input.style.flexBasis = previousFlexBasis;
-    input.style.width = previousWidth;
-    input.style.maxWidth = previousMaxWidth;
-    input.style.transition = previousTransition;
-    cancelButton.style.flexBasis = previousCancelFlexBasis;
-    cancelButton.style.width = previousCancelWidth;
-    cancelButton.style.borderWidth = previousCancelBorderWidth;
-    cancelButton.style.opacity = previousCancelOpacity;
-    cancelButton.style.transform = previousCancelTransform;
-    cancelButton.style.transition = previousCancelTransition;
-    cancelButton.style.marginLeft = previousCancelMarginLeft;
-  };
 }
 
 function parseCssPixelValue(value) {
@@ -3562,13 +4164,17 @@ function formatRecurringShowDays(task) {
 }
 
 function formatScheduledPanelMeta(task) {
-  const metaParts = [formatScheduledTaskTypeLabel(task), formatTaskAppearanceLabel(task)];
+  if (isRecurringTask(task)) {
+    const typeLabel = formatScheduledTaskTypeLabel(task);
 
-  if (isRecurringTask(task) && getEffectiveRecurringShowDays(task).length > 0) {
-    metaParts.push(formatRecurringShowDays(task));
+    if (normalizeRecurringIntervalDays(task.intervalDays) === 1) {
+      return typeLabel;
+    }
+
+    return `${typeLabel} | ${formatRecurringShowDays(task)}`;
   }
 
-  return metaParts.join(" | ");
+  return formatScheduledTaskTypeLabel(task);
 }
 
 function formatScheduledTaskTypeLabel(task) {
@@ -3589,43 +4195,14 @@ function formatScheduledPanelStatus(task) {
   }
 
   if (doesScheduledTaskShowToday(task)) {
-    return "On list";
+    return "Active";
   }
 
-  return formatTaskAppearanceLabel(task);
+  return "";
 }
 
 function doesScheduledTaskShowToday(task) {
   return getTaskAppearanceDateId(task) === dailyPeriodId(new Date()) && !task.done;
-}
-
-function formatTaskAppearanceLabel(task) {
-  return `Appears ${formatAppearanceDateLabel(getTaskAppearanceDateId(task))}`;
-}
-
-function formatAppearanceDateLabel(dateId) {
-  const todayId = dailyPeriodId(new Date());
-  const tomorrowId = addCalendarDaysToDateId(todayId, 1);
-
-  if (dateId === todayId) {
-    return "today";
-  }
-
-  if (dateId === tomorrowId) {
-    return "tomorrow";
-  }
-
-  const utcTime = dateIdToUtcTime(dateId);
-
-  if (utcTime === null) {
-    return "soon";
-  }
-
-  return formatPlannerDate(new Date(utcTime), {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
 }
 
 function getTaskAppearanceDateId(task) {
@@ -3753,8 +4330,13 @@ function normalizeTaskSet(taskSet) {
         done: Boolean(task?.done),
         priority: Boolean(task?.priority),
       };
+      const irlKind = normalizeRjListKind(task?.irlKind);
       const completedOrder = normalizeCompletionOrder(task?.completedOrder);
       const showOnDate = normalizeDateId(task?.showOnDate);
+
+      if (irlKind) {
+        normalizedTask.irlKind = irlKind;
+      }
 
       if (normalizedTask.done && completedOrder !== null) {
         normalizedTask.completedOrder = completedOrder;
@@ -3777,6 +4359,32 @@ function normalizeTaskSet(taskSet) {
       return normalizedTask;
     })
     .filter((task) => task.text.length > 0);
+}
+
+function normalizeRjListKind(value) {
+  if (value === RJ_LIST_KIND_TODO || value === RJ_LIST_KIND_SCHEDULE) {
+    return value;
+  }
+
+  return "";
+}
+
+function normalizeSharedRjState(parsed) {
+  const defaults = createDefaultSharedRjState();
+
+  return {
+    lastSavedAt: normalizeSavedAt(parsed?.lastSavedAt),
+    tasks: {
+      todo: normalizeTaskSet(parsed?.tasks?.todo || defaults.tasks.todo).map((task) => ({
+        ...task,
+        irlKind: RJ_LIST_KIND_TODO,
+      })),
+      schedule: normalizeTaskSet(parsed?.tasks?.schedule || defaults.tasks.schedule).map((task) => ({
+        ...task,
+        irlKind: RJ_LIST_KIND_SCHEDULE,
+      })),
+    },
+  };
 }
 
 function normalizeListSetState(listSet) {
@@ -3910,6 +4518,11 @@ async function loadAuthenticatedPlanner(user) {
   signedInUserEmail = user.email || "Signed in";
   activeStorageKey = getUserStorageKey(user.id);
   partnerState = null;
+  sharedRjState = createDefaultSharedRjState();
+  sharedRjPairingId = "";
+  sharedRjSyncPending = false;
+  sharedRjRemoteAvailable = true;
+  sharedRjRemoteNotice = "";
   pairingContext = createEmptyPairingContext();
 
   await upsertPlannerProfile(user);
@@ -3945,6 +4558,10 @@ async function loadAuthenticatedPlanner(user) {
 
   supabaseSyncReady = true;
   setSupabaseSyncStatus("synced");
+
+  if (getAcceptedPairing() && sharedRjState.lastSavedAt) {
+    queueSharedRjSync();
+  }
 
   if (shouldMigrateLegacyState) {
     pendingLegacyMigrationUserId = user.id;
@@ -4032,9 +4649,14 @@ async function refreshPairingContext({ silent = false } = {}) {
     pairingContext = context;
 
     if (context.accepted) {
-      await loadPartnerPlannerState({ silent: true });
+      await Promise.all([loadPartnerPlannerState({ silent: true }), loadSharedRjPlannerState({ silent: true })]);
     } else {
       partnerState = null;
+      sharedRjState = createDefaultSharedRjState();
+      sharedRjPairingId = "";
+      sharedRjSyncPending = false;
+      sharedRjRemoteAvailable = true;
+      sharedRjRemoteNotice = "";
     }
 
     renderPairingControls();
@@ -4106,6 +4728,73 @@ function createPartnerFallbackState() {
     ...structuredClone(defaultState),
     activeListSet: getVisibleListSetId(),
   };
+}
+
+function getSharedRjStorageKey(pairingId) {
+  return `${STORAGE_KEY}:shared:${pairingId}`;
+}
+
+function loadSharedRjStateFromStorage(pairingId) {
+  try {
+    const raw = localStorage.getItem(getSharedRjStorageKey(pairingId));
+    return raw ? normalizeSharedRjState(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadSharedRjPlannerState({ silent = false } = {}) {
+  const acceptedPairing = getAcceptedPairing();
+  const pairingId = acceptedPairing?.id || "";
+
+  if (!pairingId || (sharedRjSyncPending && sharedRjPairingId === pairingId)) {
+    return;
+  }
+
+  const localState = loadSharedRjStateFromStorage(pairingId);
+
+  if (!sharedRjRemoteAvailable) {
+    sharedRjState = localState || createDefaultSharedRjState();
+    sharedRjPairingId = pairingId;
+    return;
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from(SUPABASE_SHARED_STATE_TABLE)
+      .select("data, updated_at")
+      .eq("pairing_id", pairingId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    const remoteState = data?.data ? normalizeSharedRjState(data.data) : null;
+    const shouldUseRemote = remoteState && (!localState || isStateNewer(remoteState, localState));
+    sharedRjState = shouldUseRemote ? remoteState : localState || remoteState || createDefaultSharedRjState();
+    sharedRjPairingId = pairingId;
+    persistSharedRjState();
+
+    if (state.activeListSet === "rj") {
+      renderSharedRjLists();
+    }
+  } catch (error) {
+    sharedRjState = localState || createDefaultSharedRjState();
+    sharedRjPairingId = pairingId;
+    const isMissingTable = isMissingSharedStateTableError(error);
+
+    if (isMissingTable) {
+      sharedRjRemoteAvailable = false;
+      sharedRjRemoteNotice = "Shared lists are saved locally until Supabase setup is updated.";
+      sharedRjSyncPending = false;
+      renderSaveStatus();
+    }
+
+    if (!silent && !isMissingTable) {
+      setPairingMessage(formatSupabaseError(error), true);
+    }
+  }
 }
 
 function getOtherPairingUserId(pairing) {
@@ -4634,6 +5323,11 @@ function showAuthView(message = "", isError = false) {
   state = structuredClone(defaultState);
   selfState = state;
   partnerState = null;
+  sharedRjState = createDefaultSharedRjState();
+  sharedRjPairingId = "";
+  sharedRjSyncPending = false;
+  sharedRjRemoteAvailable = true;
+  sharedRjRemoteNotice = "";
   pairingContext = createEmptyPairingContext();
   closeSettingsModal();
   renderAll();
@@ -4689,6 +5383,28 @@ function saveSelfState() {
   queueSupabaseSync();
 }
 
+function saveSharedRjState() {
+  const acceptedPairing = getAcceptedPairing();
+
+  if (!acceptedPairing) {
+    return;
+  }
+
+  sharedRjPairingId = acceptedPairing.id;
+  sharedRjState.lastSavedAt = new Date().toISOString();
+  persistSharedRjState();
+  renderSaveStatus();
+  queueSharedRjSync();
+}
+
+function persistSharedRjState() {
+  if (!sharedRjPairingId) {
+    return;
+  }
+
+  localStorage.setItem(getSharedRjStorageKey(sharedRjPairingId), JSON.stringify(sharedRjState));
+}
+
 function ensureSaveStatusTimestamp() {
   if (!state.lastSavedAt) {
     state.lastSavedAt = new Date().toISOString();
@@ -4715,6 +5431,62 @@ function queueSupabaseSync() {
 
   supabaseSyncPending = true;
   void flushSupabaseSync();
+}
+
+function queueSharedRjSync() {
+  if (
+    !supabaseSyncReady ||
+    !supabaseClient ||
+    !supabaseUserId ||
+    !sharedRjPairingId ||
+    !sharedRjRemoteAvailable
+  ) {
+    return;
+  }
+
+  sharedRjSyncPending = true;
+  void flushSharedRjSync();
+}
+
+async function flushSharedRjSync() {
+  if (sharedRjSyncInFlight) {
+    return;
+  }
+
+  sharedRjSyncInFlight = true;
+
+  try {
+    while (sharedRjSyncPending) {
+      sharedRjSyncPending = false;
+      setSupabaseSyncStatus("syncing");
+      const pairingId = sharedRjPairingId;
+      const payload = JSON.parse(JSON.stringify(sharedRjState));
+      const { error } = await supabaseClient.from(SUPABASE_SHARED_STATE_TABLE).upsert({
+        pairing_id: pairingId,
+        data: payload,
+        updated_at: sharedRjState.lastSavedAt || new Date().toISOString(),
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setSupabaseSyncStatus("synced");
+    }
+  } catch (error) {
+    if (isMissingSharedStateTableError(error)) {
+      sharedRjRemoteAvailable = false;
+      sharedRjRemoteNotice = "Shared lists are saved locally until Supabase setup is updated.";
+      sharedRjSyncPending = false;
+      setSupabaseSyncStatus("synced");
+      return;
+    }
+
+    sharedRjSyncPending = true;
+    setSupabaseSyncStatus("error", error);
+  } finally {
+    sharedRjSyncInFlight = false;
+  }
 }
 
 async function flushSupabaseSync() {
@@ -4785,6 +5557,15 @@ function formatSupabaseError(error) {
   return String(message).replace(/\s+/g, " ").trim();
 }
 
+function isMissingSharedStateTableError(error) {
+  const message = formatSupabaseError(error);
+
+  return (
+    error?.code === "PGRST205" ||
+    (/planner_shared_states/i.test(message) && /schema cache|could not find the table|does not exist/i.test(message))
+  );
+}
+
 function formatAuthError(error) {
   const message = formatSupabaseError(error);
 
@@ -4811,6 +5592,12 @@ function renderSaveStatus() {
 
   if (supabaseSyncStatus === "syncing") {
     els.saveStatus.textContent = "Syncing to Supabase...";
+    return;
+  }
+
+  if (sharedRjRemoteNotice && getAcceptedPairing()) {
+    els.saveStatus.textContent = "Shared lists saved locally";
+    els.saveStatus.title = `${sharedRjRemoteNotice} Run supabase-setup.sql to enable paired sync.`;
     return;
   }
 
