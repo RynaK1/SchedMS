@@ -6128,6 +6128,10 @@ body:not(.rj-mode) .app:not(.rj-mode) {
   content: none;
 }
 
+.app.rj-mode .irl-card .task-days-left {
+  display: none;
+}
+
 /* The hidden attribute always wins over mode and responsive layout rules. */
 [hidden] {
   display: none !important;

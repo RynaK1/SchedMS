@@ -153,6 +153,14 @@ let dragState = {
   taskId: null,
   insertIndex: null,
 };
+let rjDragState = {
+  owner: null,
+  kind: null,
+  taskId: null,
+  taskGroup: null,
+  insertIndex: null,
+  listEl: null,
+};
 let dragAutoScrollState = {
   listType: null,
   frameId: null,
@@ -1889,6 +1897,7 @@ function renderInteractiveRjList(tasks, listEl, emptyEl, owner, kind) {
       ? getVisibleTasksForList("persistent", orderTasksForList("persistent", tasks))
       : orderTasksByDone(tasks);
   listEl.innerHTML = "";
+  wireRjListDragSurface(listEl, owner, kind);
 
   orderedTasks.forEach((task) => {
     const isTaskEditing = isEditingTask("persistent", task.id);
@@ -1899,6 +1908,7 @@ function renderInteractiveRjList(tasks, listEl, emptyEl, owner, kind) {
     item.dataset.taskId = task.id;
     item.dataset.recurring = String(isRecurringTask(task));
     item.dataset.taskGroup = getRjTaskGroup(task);
+    item.draggable = !task.done && !isTaskEditing;
 
     if (isTaskEditing) {
       item.classList.add("editing");
@@ -1907,6 +1917,34 @@ function renderInteractiveRjList(tasks, listEl, emptyEl, owner, kind) {
     if (pendingAppendAnimations.has(task.id)) {
       item.classList.add("append-enter");
     }
+
+    item.addEventListener("dragstart", (event) => {
+      if (task.done || isTaskEditing || event.target.closest("button")) {
+        event.preventDefault();
+        return;
+      }
+
+      rjDragState = {
+        owner,
+        kind,
+        taskId: task.id,
+        taskGroup: getRjTaskGroup(task),
+        insertIndex: null,
+        listEl,
+      };
+      item.classList.add("dragging");
+      listEl.classList.add("drag-active");
+
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", task.id);
+      }
+    });
+
+    item.addEventListener("dragend", () => {
+      item.classList.remove("dragging");
+      cleanupRjDragState();
+    });
 
     const priorityButton = document.createElement("button");
     priorityButton.type = "button";
@@ -2151,6 +2189,163 @@ function renderInteractiveRjList(tasks, listEl, emptyEl, owner, kind) {
   });
 
   emptyEl.style.display = orderedTasks.length === 0 ? "block" : "none";
+}
+
+function wireRjListDragSurface(listEl, owner, kind) {
+  listEl.ondragover = (event) => {
+    if (!isActiveRjDragSurface(listEl, owner, kind)) {
+      return;
+    }
+
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "move";
+    }
+
+    const insertIndex = getRjDropInsertIndex(listEl, event.clientY);
+    rjDragState.insertIndex = insertIndex;
+    renderRjDropIndicator(listEl, insertIndex);
+  };
+
+  listEl.ondrop = (event) => {
+    if (!isActiveRjDragSurface(listEl, owner, kind)) {
+      return;
+    }
+
+    event.preventDefault();
+    const insertIndex =
+      rjDragState.insertIndex === null ? getRjDropInsertIndex(listEl, event.clientY) : rjDragState.insertIndex;
+    const reorderedIds = getRjDraggableItems(listEl).map((item) => item.dataset.taskId);
+    reorderedIds.splice(Math.max(0, Math.min(insertIndex, reorderedIds.length)), 0, rjDragState.taskId);
+    reorderRjListTasks(owner, kind, reorderedIds);
+
+    if (owner === "shared") {
+      saveSharedRjState();
+    } else {
+      saveState();
+    }
+
+    cleanupRjDragState();
+    renderAll();
+  };
+
+  listEl.ondragleave = (event) => {
+    if (!listEl.contains(event.relatedTarget)) {
+      clearRjDropIndicators();
+    }
+  };
+}
+
+function isActiveRjDragSurface(listEl, owner, kind) {
+  return (
+    rjDragState.listEl === listEl &&
+    rjDragState.owner === owner &&
+    rjDragState.kind === kind &&
+    Boolean(rjDragState.taskId)
+  );
+}
+
+function getRjDraggableItems(listEl) {
+  return [...listEl.querySelectorAll(".task-item:not(.dragging):not(.done)")];
+}
+
+function getRjDropInsertIndex(listEl, clientY) {
+  const taskItems = getRjDraggableItems(listEl);
+  let insertIndex = taskItems.findIndex((item) => {
+    const rect = item.getBoundingClientRect();
+    return clientY < rect.top + rect.height / 2;
+  });
+
+  if (insertIndex < 0) {
+    insertIndex = taskItems.length;
+  }
+
+  if (rjDragState.kind !== RJ_LIST_KIND_TODO || !rjDragState.taskGroup) {
+    return insertIndex;
+  }
+
+  const groupIndex = RJ_TASK_GROUPS.indexOf(rjDragState.taskGroup);
+  const start = RJ_TASK_GROUPS.slice(0, Math.max(0, groupIndex)).reduce(
+    (count, group) => count + taskItems.filter((item) => item.dataset.taskGroup === group).length,
+    0
+  );
+  const size = taskItems.filter((item) => item.dataset.taskGroup === rjDragState.taskGroup).length;
+  return Math.max(start, Math.min(insertIndex, start + size));
+}
+
+function renderRjDropIndicator(listEl, insertIndex) {
+  const taskItems = getRjDraggableItems(listEl);
+  const upperTask = taskItems[insertIndex - 1];
+  const lowerTask = taskItems[insertIndex];
+  clearRjDropIndicators();
+  listEl.classList.add("drag-active");
+  listEl.classList.toggle("drop-at-start", insertIndex === 0);
+
+  if (upperTask) {
+    upperTask.classList.add("drop-after");
+  }
+
+  if (lowerTask && insertIndex !== 0) {
+    lowerTask.classList.add("drop-before");
+  }
+}
+
+function reorderRjListTasks(owner, kind, reorderedIds) {
+  const sourceTasks =
+    owner === "shared" ? sharedRjState.tasks[kind] : state.listSets.rj.tasks.persistent;
+  const draggedGroup = rjDragState.taskGroup;
+  const shouldReorder = (task) => {
+    const taskKind = isRjScheduleTask(task) ? RJ_LIST_KIND_SCHEDULE : RJ_LIST_KIND_TODO;
+
+    if (taskKind !== kind || task.done) {
+      return false;
+    }
+
+    if (kind === RJ_LIST_KIND_TODO) {
+      return getRjTaskGroup(task) === draggedGroup && isTaskVisibleInList("persistent", task);
+    }
+
+    return true;
+  };
+  const taskById = new Map(sourceTasks.filter(shouldReorder).map((task) => [task.id, task]));
+  const orderedTasks = reorderedIds.map((taskId) => taskById.get(taskId)).filter(Boolean);
+  let orderedIndex = 0;
+  const nextTasks = sourceTasks.map((task) => {
+    if (!shouldReorder(task)) {
+      return task;
+    }
+
+    const replacement = orderedTasks[orderedIndex];
+    orderedIndex += 1;
+    return replacement || task;
+  });
+
+  if (owner === "shared") {
+    sharedRjState.tasks[kind] = nextTasks;
+  } else {
+    state.listSets.rj.tasks.persistent = nextTasks;
+  }
+}
+
+function clearRjDropIndicators() {
+  document.querySelectorAll(".task-item.drop-before, .task-item.drop-after").forEach((item) => {
+    item.classList.remove("drop-before", "drop-after");
+  });
+  document.querySelectorAll(".task-list.drop-at-start, .task-list.drag-active").forEach((list) => {
+    list.classList.remove("drop-at-start", "drag-active");
+  });
+}
+
+function cleanupRjDragState() {
+  clearRjDropIndicators();
+  rjDragState = {
+    owner: null,
+    kind: null,
+    taskId: null,
+    taskGroup: null,
+    insertIndex: null,
+    listEl: null,
+  };
 }
 
 function updateRecurringTaskCompletionFields(task, done) {
@@ -2526,18 +2721,10 @@ function renderList(listType) {
     let repeatBadge = null;
 
     if (isRecurringTask(task)) {
-      const daysLeftText = formatRecurringDaysLeft(task);
-
-      if (daysLeftText) {
-        const daysLeft = document.createElement("span");
-        daysLeft.className = "task-days-left";
-        daysLeft.textContent = daysLeftText;
-        label.appendChild(daysLeft);
-      }
-
       repeatBadge = document.createElement("span");
       repeatBadge.className = "task-badge";
       repeatBadge.textContent = "\u21bb";
+      repeatBadge.setAttribute("aria-label", "Recurring");
       repeatBadge.title = `${formatRecurringIntervalLabel(task.intervalDays)}; ${formatRecurringShowDays(task)}`;
       label.appendChild(repeatBadge);
     }
@@ -4124,19 +4311,6 @@ function doesRecurringTaskShowToday(task, date = new Date()) {
   const showDays = getEffectiveRecurringShowDays(task);
 
   return showDays.length === 0 || showDays.includes(currentPlannerDayIndex(date));
-}
-
-function formatRecurringDaysLeft(task) {
-  if (getEffectiveRecurringShowDays(task).length === 0) {
-    return "";
-  }
-
-  const nextDueDate =
-    normalizeDateId(task.nextDueDate) ||
-    addDaysToDateId(normalizeDateId(task.recurringStartDate) || dailyPeriodId(new Date()), task.intervalDays);
-  const daysLeft = getDaysUntilDate(nextDueDate);
-
-  return daysLeft === 1 ? "final day" : `${daysLeft} days left`;
 }
 
 function formatRecurringIntervalLabel(intervalDays) {
